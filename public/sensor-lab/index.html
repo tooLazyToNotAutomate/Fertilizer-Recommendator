@@ -1,0 +1,1411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sensor Lab</title>
+<style>
+  :root {
+    --bg: #f4f6f3; --surface: #ffffff; --surface-2: #eef1ec; --border: #d9ded5;
+    --text: #1c2420; --muted: #5d6a62; --accent: #2f7d4f; --accent-ink: #ffffff;
+    --good: #2f7d4f; --warn: #a86a00; --bad: #b3261e; --chart: #2f7d4f; --chart-2: #2b6cb0;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121714; --surface: #1a211d; --surface-2: #232c26; --border: #33403a;
+      --text: #e6ece7; --muted: #95a39a; --accent: #58b37c; --accent-ink: #0d1510;
+      --good: #58b37c; --warn: #e0a43a; --bad: #f0746c; --chart: #58b37c; --chart-2: #6aa8e8;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.danger { color: var(--bad); }
+  button.chip { padding: 3px 10px; border-radius: 999px; font-size: 12.5px; }
+  input[type=number], input[type=text], select {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px;
+  }
+  input:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  label { color: var(--muted); }
+
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 17px; margin: 0 8px 0 0; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--border); font-size: 13px;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .pill[data-state=on] .dot { background: var(--good); }
+  .pill[data-state=wait] .dot { background: var(--warn); }
+  .pill[data-state=demo] .dot { background: var(--chart-2); }
+  .spacer { flex: 1; }
+
+  .banner { margin: 12px 16px 0; padding: 10px 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--warn); color: var(--text); }
+  .banner[hidden] { display: none; }
+
+  main { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; padding: 16px; align-items: start; }
+  @media (max-width: 980px) { main { grid-template-columns: minmax(0, 1fr); } }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .card + .card { margin-top: 14px; }
+  .card h2 { font-size: 15px; margin: 0 0 2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 14px; color: var(--muted); }
+  .tab[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .panel[hidden] { display: none; }
+
+  .big { font-size: 40px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .unit { font-size: 16px; color: var(--muted); margin-left: 4px; font-weight: 500; }
+  .meta { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .chip-status { padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid currentColor; }
+  .chip-status[data-s=good] { color: var(--good); }
+  .chip-status[data-s=warn] { color: var(--warn); }
+  .chip-status[data-s=bad] { color: var(--bad); }
+  .chip-status[data-s=idle] { color: var(--muted); }
+  canvas { width: 100%; height: 130px; display: block; margin-top: 10px; background: var(--surface-2); border-radius: 8px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; }
+  .stats span b { color: var(--text); font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  th { color: var(--muted); font-weight: 500; }
+  td.num { text-align: right; } th.num { text-align: right; }
+  .noisy { color: var(--warn); }
+  .warn-text { color: var(--warn); margin: 8px 0 0; }
+  .ok-text { color: var(--good); margin: 8px 0 0; }
+  progress { width: 140px; height: 8px; accent-color: var(--accent); }
+  .ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
+  .ol li { margin: 2px 0; }
+
+  /* serial monitor */
+  #log {
+    font: 12.5px/1.5 var(--mono); background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; height: 420px; overflow: auto; padding: 8px 10px; margin-top: 10px; white-space: pre-wrap; word-break: break-all;
+  }
+  .ln .ts { color: var(--muted); margin-right: 8px; }
+  .ln.tx { color: var(--chart-2); }
+  .ln.sys { color: var(--muted); font-style: italic; }
+  .ln.err { color: var(--bad); }
+  .ln.cmt { color: var(--warn); }
+  .ln[hidden] { display: none; }
+  .sendbar { display: flex; gap: 8px; margin-top: 10px; }
+  .sendbar input { flex: 1; min-width: 0; font-family: var(--mono); }
+
+  pre.code {
+    font: 12.5px/1.5 var(--mono); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; overflow: auto; max-height: 520px; margin: 10px 0 0; white-space: pre;
+  }
+  .demo-box { margin-top: 12px; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; }
+  .demo-box[hidden] { display: none; }
+  .demo-box input[type=range] { vertical-align: middle; }
+  #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--text); color: var(--bg);
+    padding: 8px 14px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90vw; }
+  #toast.show { opacity: .95; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sensor Lab <span class="sub" style="font-weight:400">· Smart Soil Analyzer</span></h1>
+  <span class="pill" id="status" data-state="off"><span class="dot"></span><span id="statusText">Disconnected</span></span>
+  <span class="spacer"></span>
+  <label for="baud">Baud</label>
+  <select id="baud">
+    <option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option>
+  </select>
+  <button id="btnConnect" class="primary">Connect Arduino</button>
+  <button id="btnDemo" title="Simulated sensors, no hardware needed">Demo mode</button>
+</header>
+
+<div class="banner" id="noSerial" hidden>
+  This browser has no Web Serial support. Open this page in <b>Chrome</b> or <b>Edge</b> on a computer to connect the Arduino.
+  Demo mode still works here.
+</div>
+
+<main>
+  <section>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-tab="steps">Steps</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="live">Live</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="cal">Calibrate</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="sketch">Sketch</button>
+    </div>
+
+    <!-- LIVE -->
+    <!-- STEPS (bench bring-up, one module at a time) -->
+    <div class="panel" id="panel-steps">
+      <div class="card">
+        <div class="row" id="stepNav"></div>
+        <p class="sub" style="margin-top:8px">Unplug USB before every rewire. Bright wires are new in this step; faded ones stay from earlier steps.</p>
+      </div>
+      <div class="card">
+        <div class="row"><h2 id="stepTitle"></h2><span class="spacer"></span>
+          <button id="btnStepFlash" class="primary" title="Compile + upload this step's sketch through the bridge">Upload this step</button></div>
+        <p class="sub" id="stepSketch"></p>
+        <div id="stepSvg" style="margin-top:10px"></div>
+        <div class="row" id="stepLegend" style="margin-top:6px;gap:4px 14px;font-size:12.5px"></div>
+      </div>
+      <div class="card">
+        <div class="row"><h2>Live check</h2><span class="spacer"></span><span class="chip-status" id="stepVerdict" data-s="idle">waiting</span></div>
+        <div id="stepLive" style="margin-top:8px;font-size:14px"></div>
+        <h2 style="margin-top:14px">New wires in this step</h2>
+        <table id="stepWires"></table>
+        <h2 style="margin-top:14px">Pass when</h2>
+        <ul class="ol" id="stepPass"></ul>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-live" hidden>
+      <div class="card" id="card-moisture"></div>
+      <div class="card" id="card-ph"></div>
+      <div class="card">
+        <div class="row">
+          <label for="filterN">Spike filter (median of last <b id="filterNVal">5</b> readings)</label>
+          <input type="range" id="filterN" min="1" max="15" value="5">
+          <label><input type="checkbox" id="autoZoom" checked> Auto-zoom charts</label>
+        </div>
+        <p class="sub">Loose wire giving the odd bad reading? Raise the filter and the displayed number ignores one-off spikes. The chart and health check always show the unfiltered signal.</p>
+        <div class="demo-box" id="demoBox" hidden>
+          <b>Demo controls</b> <span class="sub">(simulated sensor)</span>
+          <div class="row" style="margin-top:6px">
+            <label for="demoMoist">Soil moisture</label>
+            <input type="range" id="demoMoist" min="0" max="100" value="40"> <b id="demoMoistVal">40 %</b>
+          </div>
+          <div class="row">
+            <label for="demoPh">pH</label>
+            <input type="range" id="demoPh" min="3" max="10" step="0.1" value="6.5"> <b id="demoPhVal">6.5</b>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="demoLoose"> Simulate a loose moisture wire</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CALIBRATE -->
+    <div class="panel" id="panel-cal" hidden>
+      <div class="card">
+        <div class="row">
+          <label for="adcRef">Arduino supply / ADC reference</label>
+          <input type="number" id="adcRef" min="3" max="5.5" step="0.01" value="5.00" style="width:90px"> <span class="meta">volts (5.00 for a USB-powered Uno)</span>
+        </div>
+        <p class="sub">Calibration points are stored in this browser. Capture at least two points per sensor, then use the Sketch tab to put the numbers on the Arduino.</p>
+        <p class="sub" id="fwNote" hidden></p>
+      </div>
+      <div class="card" id="cal-moisture"></div>
+      <div class="card" id="cal-ph"></div>
+    </div>
+
+    <!-- SKETCH -->
+    <div class="panel" id="panel-sketch" hidden>
+      <div class="card">
+        <h2>Arduino sketch with your calibration</h2>
+        <p class="sub"><b>For the exhibition use Steps → 6 · Final</b> (hardware/firmware/soil_analyzer, already calibrated). This tab builds the older, simpler sensor_lab sketch from the points captured in the Calibrate tab.</p>
+        <p class="sub" id="sketchStatus"></p>
+        <div class="row" style="margin-top:8px">
+          <button id="btnCopy" class="primary">Copy sketch</button>
+          <button id="btnDownload">Download .ino</button>
+          <button id="btnFlash" class="primary" hidden title="Writes the sketch to arduino/sensor_lab, compiles it and uploads it (bridge only)">Upload to board</button>
+        </div>
+        <ol class="ol">
+          <li>Disconnect here first (the Arduino IDE can't upload while this page holds the port).</li>
+          <li>Open the Arduino IDE, install the display library named at the top of the sketch (Library Manager), check <code>DISPLAY_TYPE</code> / <code>DISPLAY_ADDR</code>, and upload. Not sure which display you have? Send <code>SCAN</code> from the serial monitor.</li>
+          <li>Reconnect here. The Live tab should now show board values that match.</li>
+        </ol>
+        <pre class="code" id="sketchCode"></pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <div class="row">
+        <h2>Serial monitor</h2>
+        <span class="spacer"></span>
+        <label><input type="checkbox" id="optTs" checked> time</label>
+        <label><input type="checkbox" id="optScroll" checked> autoscroll</label>
+        <button id="btnPause" class="chip">Pause</button>
+        <button id="btnClear" class="chip">Clear</button>
+        <button id="btnSave" class="chip">Save log</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input type="text" id="filter" placeholder="Filter lines (e.g. raw_ph or #)" style="flex:1;min-width:140px">
+      </div>
+      <div id="log" role="log" aria-live="off"></div>
+      <form class="sendbar" id="sendForm" autocomplete="off">
+        <input type="text" id="sendText" placeholder="Type a command, press Enter  (e.g. INFO)" aria-label="Command to send">
+        <select id="eol" aria-label="Line ending">
+          <option value="\n">Newline</option><option value="\r\n">CR + NL</option><option value="\r">CR</option><option value="">None</option>
+        </select>
+        <button class="primary" type="submit">Send</button>
+      </form>
+      <div class="row" style="margin-top:8px">
+        <span class="sub">Quick:</span>
+        <button class="chip" data-cmd="INFO">INFO</button>
+        <button class="chip" data-cmd="SCAN">SCAN (I2C)</button>
+        <button class="chip" data-cmd="TEST">TEST A0 wiring</button>
+        <button class="chip" data-cmd="TEST 1">TEST A1 wiring</button>
+        <button class="chip" data-cmd="RATE 250">RATE 250</button>
+        <button class="chip" data-cmd="RATE 1000">RATE 1000</button>
+        <button class="chip" data-cmd="AVG 1">AVG 1 (raw)</button>
+        <button class="chip" data-cmd="AVG 10">AVG 10</button>
+      </div>
+      <p class="sub" style="margin-top:8px">Needs <code>sensor_lab.ino</code> on the board for the commands to work. Close the Arduino IDE Serial Monitor first: only one program can use the USB port.</p>
+    </div>
+  </section>
+</main>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* ---------- helpers ---------- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+const std = a => { if (a.length < 2) return 0; const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1)); };
+const median = a => { const s = [...a].sort((x, y) => x - y); const h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const fmt = (v, d) => (v === null || v === undefined || Number.isNaN(v)) ? '—' : v.toFixed(d);
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+const stamp = (d = new Date()) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+/* ---------- persistent state ---------- */
+const STORE = 'sensorLab.v1';
+const state = { adcRef: 5.0, cal: { moisture: [], ph: [] }, filterN: 5, autoZoom: true };
+function loadState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE) || 'null');
+    if (s && typeof s === 'object') {
+      if (typeof s.adcRef === 'number') state.adcRef = s.adcRef;
+      if (s.cal) for (const k of ['moisture', 'ph']) if (Array.isArray(s.cal[k])) state.cal[k] = s.cal[k].filter(p => Number.isFinite(p.raw) && Number.isFinite(p.ref));
+      if (Number.isFinite(s.filterN)) state.filterN = clamp(s.filterN, 1, 15);
+      if (typeof s.autoZoom === 'boolean') state.autoZoom = s.autoZoom;
+    }
+  } catch (e) { /* storage blocked: run without persistence */ }
+}
+function saveState() {
+  try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* ignore */ }
+  if (typeof bridge !== 'undefined' && bridge.on) {
+    fetch('/api/state', { method: 'POST', headers: { 'X-Lab': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(state) }).catch(() => {});
+  }
+}
+
+/* ---------- channel definitions ---------- */
+const CH = {
+  moisture: {
+    id: 'moisture', name: 'Soil moisture', pin: 'A1', rawKey: 'a0', fwKey: 'moisture', unit: '%', dec: 0, lo: 0, hi: 100,
+    xOf: raw => raw, xName: 'raw ADC', refLabel: 'Moisture %', refStep: 1,
+    presets: [{ label: 'Dry · in air', ref: 0 }, { label: 'Wet · in water', ref: 100 }, { label: '50 %', ref: 50 }],
+    steps: ['Dry point: hold the sensor in open air (not touching anything), set reference to 0, wait until the chart is flat, press Capture.',
+            'Wet point: put the sensing part in a glass of water up to the line marked on the sensor (never past the electronics), set reference to 100, Capture.']
+  },
+  ph: {
+    id: 'ph', name: 'Soil pH', pin: 'A0', rawKey: 'a1', fwKey: 'ph', unit: 'pH', dec: 2, lo: 0, hi: 14,
+    xOf: raw => raw * state.adcRef / 1023, xName: 'volts', refLabel: 'Buffer pH', refStep: 0.01,
+    presets: [{ label: 'pH 4.00', ref: 4.00 }, { label: 'pH 6.86', ref: 6.86 }, { label: 'pH 7.00', ref: 7.00 }, { label: 'pH 9.18', ref: 9.18 }, { label: 'pH 10.01', ref: 10.01 }],
+    steps: ['Use pH buffer solutions (powder sachets in water work). Two buffers that bracket your soil, e.g. 4.00 and 6.86/7.00, are the minimum; a third (9.18) improves accuracy.',
+            'Rinse the probe with clean water between buffers. Put it in a buffer, wait for the health chip to say Stable (pH probes take 30-60 s), type the buffer value, Capture.']
+  }
+};
+const CHANNELS = Object.values(CH);
+
+/* ---------- sample buffers ---------- */
+const MAXBUF = 400;
+const buf = { a0: [], a1: [] };            // raw ADC history, newest last
+const fw = { ph: null, moisture: null, temperature: null, humidity: null };  // values the board reports itself
+let lastSampleAt = 0, sampleCount = 0, haveRaw = false;
+let capture = null;                         // active calibration capture
+
+function ingest(obj) {
+  const now = Date.now();
+  if (typeof onStepData === 'function') onStepData(obj);
+  if (Number.isFinite(obj.step)) { lastSampleAt = now; if (!['raw_ph', 'raw_moisture', 'ph', 'moisture'].some(k => Number.isFinite(obj[k]))) { sampleCount++; return; } }
+  if (Number.isFinite(obj.vcc) && obj.vcc > 3.5 && obj.vcc < 5.6 && Math.abs(obj.vcc - state.adcRef) > 0.01) {
+    state.adcRef = obj.vcc; const el = document.getElementById('adcRef'); if (el) el.value = obj.vcc.toFixed(2);
+  }
+  let got = false;
+  const get = (...keys) => { for (const k of keys) if (Number.isFinite(obj[k])) return obj[k]; return null; };
+  const a0 = get('a0', 'raw_moisture', 'moisture_raw', 'soil_raw');
+  const a1 = get('a1', 'raw_ph', 'ph_raw');
+  if (a0 !== null) { buf.a0.push(a0); if (buf.a0.length > MAXBUF) buf.a0.shift(); got = true; haveRaw = true; }
+  if (a1 !== null) { buf.a1.push(a1); if (buf.a1.length > MAXBUF) buf.a1.shift(); got = true; haveRaw = true; }
+  for (const k of Object.keys(fw)) if (Number.isFinite(obj[k])) { fw[k] = obj[k]; got = true; }
+  if (!got) return;
+  lastSampleAt = now; sampleCount++;
+  if (capture) {
+    const v = capture.ch.rawKey === 'a0' ? a0 : a1;
+    if (v !== null) capture.samples.push(v);
+  }
+  scheduleRender();
+}
+
+/* parse a text line from the board: JSON, or loose "name: value" pairs */
+function parseLine(line) {
+  const s = line.trim();
+  if (!s || s[0] === '#') return null;
+  const o = {};
+  if (s[0] === '{') {
+    try { const j = JSON.parse(s); for (const k in j) if (typeof j[k] === 'number') o[k.toLowerCase()] = j[k]; return Object.keys(o).length ? o : null; }
+    catch (e) { return null; }       // partial line right after the Arduino resets
+  }
+  const re = /([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(-?\d+(?:\.\d+)?)/g; let m;
+  while ((m = re.exec(s))) o[m[1].toLowerCase()] = parseFloat(m[2]);
+  return Object.keys(o).length ? o : null;
+}
+
+/* ---------- calibration math ---------- */
+function fitChannel(ch) {
+  const pts = state.cal[ch.id].map(p => ({ x: ch.xOf(p.raw), y: p.ref }));
+  if (pts.length < 2) return null;
+  const n = pts.length;
+  const sx = pts.reduce((s, p) => s + p.x, 0), sy = pts.reduce((s, p) => s + p.y, 0);
+  const sxx = pts.reduce((s, p) => s + p.x * p.x, 0), sxy = pts.reduce((s, p) => s + p.x * p.y, 0);
+  const den = n * sxx - sx * sx;
+  if (Math.abs(den) < 1e-9) return { error: 'All captured points have the same reading. The sensor output is not changing: check its wiring, or make sure the sensor really was in different conditions.' };
+  const m = (n * sxy - sx * sy) / den, b = (sy - m * sx) / n;
+  let r2 = null;
+  if (n >= 3) {
+    const my = sy / n; const ssTot = pts.reduce((s, p) => s + (p.y - my) ** 2, 0);
+    const ssRes = pts.reduce((s, p) => s + (p.y - (m * p.x + b)) ** 2, 0);
+    r2 = ssTot > 0 ? 1 - ssRes / ssTot : null;
+  }
+  const warnings = [];
+  if (ch.id === 'moisture') {
+    const span = Math.abs(100 / m);
+    if (span < 80) warnings.push(`Dry and wet readings are only ${Math.round(span)} counts apart. A healthy sensor moves by a few hundred counts: check the A1 wire (yellow, AOUT).`);
+  } else {
+    const vph = Math.abs(1 / m);
+    if (vph < 0.04 || vph > 0.4) warnings.push(`Slope is ${vph.toFixed(3)} V per pH. Most pH boards give about 0.18. Re-capture, and make sure the probe was fully in each buffer and settled.`);
+  }
+  if (r2 !== null && r2 < 0.99) warnings.push(`Points don't line up well (R² ${r2.toFixed(3)}). Re-capture the one that looks off.`);
+  return { m, b, r2, warnings };
+}
+function calibrated(ch, raw) {
+  const f = fitChannel(ch);
+  if (!f || f.error) return null;
+  return clamp(f.m * ch.xOf(raw) + f.b, ch.lo, ch.hi);
+}
+
+/* ---------- health check (the loose-wire detector) ---------- */
+function health(arr) {
+  const w = arr.slice(-30);
+  if (w.length < 3) return { s: 'idle', label: 'No data', msg: 'Waiting for readings…', sd: 0, mn: null, mx: null, spikes: 0, avg: null };
+  const sd = std(w), mn = Math.min(...w), mx = Math.max(...w), avg = mean(w);
+  let spikes = 0; for (let i = 1; i < w.length; i++) if (Math.abs(w[i] - w[i - 1]) > 40) spikes++;
+  const last5 = w.slice(-5);
+  const pinned = last5.every(v => v <= 2) || last5.every(v => v >= 1021);
+  let r;
+  if (pinned) r = { s: 'bad', label: 'Pinned', msg: 'Stuck at the limit (0 or 1023). Either the signal wire isn\'t touching, power is missing, or the sensor is simply out of range (e.g. dry resistive probe). Re-seat the wires.' };
+  else if (spikes >= 2) r = { s: 'bad', label: 'Check wire', msg: `${spikes} sudden jumps in the last ${w.length} readings. That pattern is a loose connection: press or re-seat the sensor's 3 wires, and the Arduino end.` };
+  else if (sd > 8) r = { s: 'warn', label: 'Noisy / changing', msg: `Reading is moving (±${sd.toFixed(1)} counts). Fine if you just moved the sensor; if not, wiggle-test the wires.` };
+  else r = { s: 'good', label: 'Stable', msg: `Steady within ±${sd.toFixed(1)} counts.` };
+  return Object.assign(r, { sd, mn, mx, spikes, avg });
+}
+
+/* ---------- cards ---------- */
+function buildLiveCards() {
+  for (const ch of CHANNELS) {
+    $('#card-' + ch.id).innerHTML = `
+      <div class="row">
+        <h2>${ch.name} <span class="sub">· ${ch.pin}</span></h2><span class="spacer"></span>
+        <span class="chip-status" data-s="idle" id="hs-${ch.id}">No data</span>
+      </div>
+      <div class="row" style="margin-top:10px;align-items:flex-end">
+        <div><span class="big" id="val-${ch.id}">—</span><span class="unit">${ch.unit}</span></div>
+        <div class="meta" id="src-${ch.id}"></div>
+      </div>
+      <div class="meta" id="raw-${ch.id}" style="margin-top:4px"></div>
+      <canvas id="cv-${ch.id}" aria-label="${ch.name} raw signal chart"></canvas>
+      <div class="stats meta" id="st-${ch.id}"></div>
+      <p class="sub" id="hm-${ch.id}" style="margin-top:6px"></p>`;
+  }
+}
+
+function buildCalCards() {
+  for (const ch of CHANNELS) {
+    const el = $('#cal-' + ch.id);
+    el.innerHTML = `
+      <div class="row"><h2>${ch.name} <span class="sub">· ${ch.pin}</span></h2><span class="spacer"></span>
+        <span class="chip-status" data-s="idle" id="chs-${ch.id}">No data</span></div>
+      <ol class="ol">${ch.steps.map(s => `<li>${s}</li>`).join('')}</ol>
+      <div class="row" style="margin-top:10px">
+        <label for="ref-${ch.id}">${ch.refLabel}</label>
+        <input type="number" id="ref-${ch.id}" step="${ch.refStep}" style="width:100px" value="${ch.presets[0].ref}">
+        ${ch.presets.map(p => `<button class="chip" data-ch="${ch.id}" data-ref="${p.ref}">${p.label}</button>`).join('')}
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label for="dur-${ch.id}">Average for</label>
+        <select id="dur-${ch.id}"><option value="3">3 s</option><option value="5" selected>5 s</option><option value="10">10 s</option></select>
+        <button class="primary" id="cap-${ch.id}">Capture point</button>
+        <progress id="prog-${ch.id}" max="1" value="0" hidden></progress>
+        <span class="meta" id="live-${ch.id}"></span>
+      </div>
+      <table><thead><tr><th>Reference</th><th class="num">Reading (${ch.id === 'ph' ? 'raw / volts' : 'raw'})</th><th class="num">± noise</th><th class="num">Samples</th><th></th></tr></thead>
+        <tbody id="pts-${ch.id}"></tbody></table>
+      <div id="fit-${ch.id}"></div>
+      <div class="row" style="margin-top:10px"><button class="chip danger" id="clr-${ch.id}">Clear ${ch.name.toLowerCase()} points</button></div>`;
+    $('#cap-' + ch.id).addEventListener('click', () => startCapture(ch));
+    $('#clr-' + ch.id).addEventListener('click', () => { state.cal[ch.id] = []; saveState(); renderCal(); renderSketch(); toast(`${ch.name} calibration cleared`); });
+    $$('button[data-ref]', el).forEach(b => b.addEventListener('click', () => { $('#ref-' + ch.id).value = b.dataset.ref; }));
+  }
+}
+
+/* ---------- rendering ---------- */
+let renderQueued = false;
+function scheduleRender() { if (!renderQueued) { renderQueued = true; setTimeout(() => { renderQueued = false; renderLive(); renderCalLive(); }, 60); } }
+
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+function drawChart(canvas, data, color) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+  const c = canvas.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
+  const muted = cssVar('--muted'), border = cssVar('--border');
+  const pts = data.slice(-150);
+  let lo = 0, hi = 1023;
+  if (state.autoZoom && pts.length) {
+    lo = Math.min(...pts); hi = Math.max(...pts);
+    if (hi - lo < 40) { const mid = (hi + lo) / 2; lo = mid - 20; hi = mid + 20; }
+    const padv = (hi - lo) * 0.1; lo -= padv; hi += padv;
+  }
+  const L = 38, R = 6, T = 8, B = 8, pw = w - L - R, ph = h - T - B;
+  c.font = '11px ' + cssVar('--mono'); c.fillStyle = muted; c.strokeStyle = border; c.lineWidth = 1;
+  for (let i = 0; i <= 2; i++) {
+    const y = T + ph * i / 2; c.beginPath(); c.moveTo(L, y); c.lineTo(w - R, y); c.stroke();
+    c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillText(Math.round(hi - (hi - lo) * i / 2), L - 5, y);
+  }
+  if (pts.length < 2) return;
+  c.strokeStyle = color; c.lineWidth = 1.8; c.lineJoin = 'round'; c.beginPath();
+  pts.forEach((v, i) => { const x = L + pw * i / Math.max(1, 149), y = T + ph * (1 - (v - lo) / (hi - lo)); i ? c.lineTo(x, y) : c.moveTo(x, y); });
+  c.stroke();
+}
+
+function setChip(el, h) { el.dataset.s = h.s; el.textContent = h.label; }
+
+function renderLive() {
+  for (const ch of CHANNELS) {
+    const arr = buf[ch.rawKey], h = health(arr);
+    setChip($('#hs-' + ch.id), h);
+    $('#hm-' + ch.id).textContent = h.msg;
+    const fN = state.filterN;
+    const rawNow = arr.length ? median(arr.slice(-fN)) : null;
+    const cal = rawNow === null ? null : calibrated(ch, rawNow);
+    let shown = null, src = '';
+    if (cal !== null) { shown = cal; src = 'calibrated here'; }
+    else if (fw[ch.fwKey] !== null && fw[ch.fwKey] >= 0) { shown = fw[ch.fwKey]; src = haveRaw ? 'from the board\'s built-in calibration, not calibrated here yet' : 'from the board (no raw values, so it can\'t be calibrated here: upload sensor_lab.ino)'; }
+    $('#val-' + ch.id).textContent = fmt(shown, ch.dec);
+    $('#src-' + ch.id).textContent = src;
+    $('#raw-' + ch.id).textContent = rawNow === null ? '' : `raw ${rawNow.toFixed(0)} · ${(rawNow * state.adcRef / 1023).toFixed(3)} V` + (fw[ch.fwKey] !== null && cal !== null ? ` · board says ${fmt(fw[ch.fwKey], ch.dec)}` : '');
+    $('#st-' + ch.id).innerHTML = h.mn === null ? '' : `<span>avg <b>${h.avg.toFixed(1)}</b></span><span>± <b>${h.sd.toFixed(1)}</b></span><span>min <b>${h.mn.toFixed(0)}</b></span><span>max <b>${h.mx.toFixed(0)}</b></span><span>spikes <b>${h.spikes}</b></span>`;
+    drawChart($('#cv-' + ch.id), arr, cssVar(ch.id === 'ph' ? '--chart-2' : '--chart'));
+  }
+}
+
+function renderCalLive() {
+  for (const ch of CHANNELS) {
+    const arr = buf[ch.rawKey], h = health(arr);
+    setChip($('#chs-' + ch.id), h);
+    $('#live-' + ch.id).textContent = arr.length ? `now: raw ${arr[arr.length - 1].toFixed(0)} (${h.label.toLowerCase()})` : '';
+    const prog = $('#prog-' + ch.id);
+    if (capture && capture.ch === ch) { prog.hidden = false; prog.value = clamp((Date.now() - capture.start) / (capture.dur * 1000), 0, 1); }
+    else prog.hidden = true;
+  }
+}
+
+function renderCal() {
+  for (const ch of CHANNELS) {
+    const body = $('#pts-' + ch.id);
+    const pts = state.cal[ch.id];
+    body.innerHTML = '';
+    if (!pts.length) { body.innerHTML = '<tr><td colspan="5" class="meta">No points yet. Capture at least two.</td></tr>'; }
+    pts.forEach((p, i) => {
+      const tr = document.createElement('tr');
+      const noisy = p.sd > 6;
+      tr.innerHTML = `<td></td><td class="num"></td><td class="num ${noisy ? 'noisy' : ''}"></td><td class="num"></td><td class="num"><button class="chip danger" aria-label="Delete point">Delete</button></td>`;
+      const t = tr.children;
+      t[0].textContent = ch.id === 'ph' ? p.ref.toFixed(2) + ' pH' : p.ref + ' %';
+      t[1].textContent = ch.id === 'ph' ? `${p.raw.toFixed(1)} / ${ch.xOf(p.raw).toFixed(3)} V` : p.raw.toFixed(1);
+      t[2].textContent = (noisy ? '⚠ ' : '') + p.sd.toFixed(1);
+      t[3].textContent = p.n;
+      t[4].firstChild.addEventListener('click', () => { pts.splice(i, 1); saveState(); renderCal(); renderSketch(); });
+      body.appendChild(tr);
+    });
+    const f = fitChannel(ch), out = $('#fit-' + ch.id);
+    out.innerHTML = '';
+    const line = (cls, text) => { const p = document.createElement('p'); p.className = cls; p.textContent = text; out.appendChild(p); };
+    if (!f) line('sub', 'Capture a second point to get a calibration.');
+    else if (f.error) line('warn-text', f.error);
+    else {
+      const eq = ch.id === 'ph' ? `pH = ${f.m.toFixed(4)} × volts + ${f.b.toFixed(4)}   (${Math.abs(1 / f.m).toFixed(3)} V per pH)` : `moisture % = ${f.m.toFixed(5)} × raw + ${f.b.toFixed(3)}`;
+      line('ok-text', 'Calibrated: ' + eq + (f.r2 !== null ? `  ·  R² ${f.r2.toFixed(4)}` : ''));
+      f.warnings.forEach(w => line('warn-text', '⚠ ' + w));
+    }
+    if (pts.some(p => p.sd > 6)) line('warn-text', '⚠ A point has a lot of noise (marked ⚠). That usually means the signal wasn\'t settled or a wire was loose. Delete it and capture again.');
+  }
+}
+
+/* ---------- capture ---------- */
+function startCapture(ch) {
+  if (capture) { toast('A capture is already running'); return; }
+  const ref = parseFloat($('#ref-' + ch.id).value);
+  if (!Number.isFinite(ref)) { toast('Enter the reference value first'); return; }
+  if (!connectionActive()) { toast('Connect the Arduino (or start Demo mode) first'); return; }
+  if (!buf[ch.rawKey].length) { toast(`No raw ${ch.pin} values arriving yet. Upload sensor_lab.ino or use Demo mode.`); return; }
+  const dur = parseInt($('#dur-' + ch.id).value, 10);
+  capture = { ch, ref, dur, start: Date.now(), samples: [] };
+  $('#cap-' + ch.id).disabled = true;
+  capture.timer = setInterval(() => {
+    renderCalLive();
+    if (Date.now() - capture.start >= dur * 1000) finishCapture();
+  }, 100);
+}
+function finishCapture() {
+  const c = capture; capture = null; clearInterval(c.timer);
+  $('#cap-' + c.ch.id).disabled = false;
+  if (c.samples.length < 3) { toast(`Only ${c.samples.length} readings arrived. Is data still streaming?`); renderCalLive(); return; }
+  const pt = { ref: c.ref, raw: mean(c.samples), sd: std(c.samples), n: c.samples.length };
+  state.cal[c.ch.id].push(pt);
+  state.cal[c.ch.id].sort((a, b) => a.ref - b.ref);
+  saveState(); renderCal(); renderCalLive(); renderSketch(); scheduleRender();
+  toast(`Captured ${c.ch.name.toLowerCase()} point at ${c.ref}${c.ch.unit === '%' ? ' %' : ' pH'}: raw ${pt.raw.toFixed(1)} ±${pt.sd.toFixed(1)}`);
+}
+
+/* ---------- sketch export ---------- */
+const SKETCH_TEMPLATE = String.raw`/*
+  FarmAssist Sensor Lab firmware
+  ------------------------------
+  Works with BOTH:
+    - sensor-lab.html (live view, calibration, serial monitor)
+    - the main FarmAssist dashboard (reads the "ph" field, 9600 baud)
+
+  Wiring:  pH board Po -> A0     Moisture sensor AOUT -> A1     LCD SDA -> A4, SCL -> A5
+           I2C display: SDA -> A4, SCL -> A5, VCC -> 5V, GND -> GND
+
+  Output, one JSON line per reading (no ArduinoJson library needed):
+    {"ph":6.80,"moisture":42,"temperature":25.0,"humidity":60,"raw_ph":340,"raw_moisture":512}
+
+  Serial commands (type them in the Sensor Lab "Send" box):
+    INFO        print current settings
+    SCAN        list I2C devices (tells you your display's address)
+    TEST [1]    wiring test for A0 (or A1 with 'TEST 1'): reads it normally and again with the internal
+                pull-up on. ~1023 with pull-up = wire not connected to anything;
+                ~0 = shorted to GND / sensor unpowered; in between = driven.
+    RATE <ms>   send interval, 100..10000  (default 500)
+    AVG <n>     analog reads averaged per value, 1..50 (default 10)
+
+  DISPLAY: set DISPLAY_TYPE below, then install the library it needs
+  (Arduino IDE > Library Manager):
+    1 = 16x2 character LCD with I2C backpack -> "LiquidCrystal I2C" (Frank de Brabander)
+    2 = 0.96" OLED, SSD1306                  -> "Adafruit SSD1306" (+ "Adafruit GFX")
+    0 = no display library needed
+  Not sure which you have? Upload with DISPLAY_TYPE 0, open Sensor Lab, send SCAN:
+    0x27 or 0x3F -> type 1 (LCD)      0x3C or 0x3D -> type 2 (OLED)
+  Put that address in DISPLAY_ADDR.
+
+  Calibration: use sensor-lab.html > Calibrate, then Sketch > Copy, and paste
+  the generated sketch here. The 5 numbers in the first block are what it changes.
+*/
+
+// ---- Calibration constants (overwritten by the generated sketch) ----
+#define MOIST_DRY   __MOIST_DRY__    // raw ADC reading with the sensor in dry air  -> 0 %   (typical capacitive board)
+#define MOIST_WET   __MOIST_WET__    // raw ADC reading with the sensor in water    -> 100 %
+#define PH_SLOPE    __PH_SLOPE__  // pH per volt        (pH = PH_SLOPE * volts + PH_OFFSET)
+#define PH_OFFSET   __PH_OFFSET__  // pH at 0 volts
+#define ADC_REF     __ADC_REF__      // Arduino supply voltage (volts)
+
+// ---- Display settings ----
+#define DISPLAY_TYPE 0       // 0 = none (no display attached), 1 = 16x2 LCD (I2C), 2 = SSD1306 OLED (I2C)
+#define DISPLAY_ADDR 0x27    // LCD: tries this, then 0x27/0x3F automatically; OLED usually 0x3C
+
+#include <Wire.h>
+#include <avr/wdt.h>   // watchdog: auto-restarts the board if it ever freezes
+
+#if DISPLAY_TYPE == 1
+  #include <LiquidCrystal_I2C.h>
+  LiquidCrystal_I2C *lcd = NULL;   // created in displayBegin() once the address is found
+#elif DISPLAY_TYPE == 2
+  #include <Adafruit_GFX.h>
+  #include <Adafruit_SSD1306.h>
+  Adafruit_SSD1306 oled(128, 64, &Wire, -1);   // uses ~1 KB of the Uno's 2 KB RAM
+#endif
+
+const int moisturePin = A1;
+const int phPin = A0;
+
+unsigned long sendEveryMs = 500;
+int samples = 10;
+unsigned long lastSend = 0;
+String cmd = "";
+
+void displayBegin() {
+#if DISPLAY_TYPE == 1
+  // Try DISPLAY_ADDR first; if nothing answers there, try the other common LCD address.
+  byte addr = DISPLAY_ADDR;
+  Wire.beginTransmission(addr);
+  if (Wire.endTransmission() != 0) addr = (DISPLAY_ADDR == 0x27) ? 0x3F : 0x27;
+  lcd = new LiquidCrystal_I2C(addr, 16, 2);
+  lcd->init();
+  lcd->backlight();
+  lcd->setCursor(0, 0);
+  lcd->print(F("FarmAssist"));
+  lcd->setCursor(0, 1);
+  lcd->print(F("Starting..."));
+#elif DISPLAY_TYPE == 2
+  if (oled.begin(SSD1306_SWITCHCAPVCC, DISPLAY_ADDR)) {
+    oled.clearDisplay();
+    oled.setTextColor(SSD1306_WHITE);
+    oled.setTextSize(2);
+    oled.setCursor(0, 0);
+    oled.print(F("FarmAssist"));
+    oled.display();
+  }
+#endif
+}
+
+void showOnDisplay(float ph, int moisturePct) {
+#if DISPLAY_TYPE == 1
+  if (lcd == NULL) return;
+  lcd->setCursor(0, 0);
+  lcd->print(F("pH: "));
+  lcd->print(ph, 2);
+  lcd->print(F("        "));          // pad to wipe leftovers from longer text
+  lcd->setCursor(0, 1);
+  lcd->print(F("Moisture: "));
+  if (moisturePct < 0) lcd->print(F("CHECK    "));
+  else { lcd->print(moisturePct); lcd->print(F("%     ")); }
+#elif DISPLAY_TYPE == 2
+  oled.clearDisplay();
+  oled.setTextSize(2);
+  oled.setCursor(0, 0);
+  oled.print(F("pH "));
+  oled.print(ph, 2);
+  oled.setCursor(0, 32);
+  oled.print(F("Moist "));
+  if (moisturePct < 0) oled.print(F("CHECK"));
+  else { oled.print(moisturePct); oled.print(F("%")); }
+  oled.display();
+#endif
+}
+
+void scanI2C() {
+  Serial.print(F("# I2C devices:"));
+  bool any = false;
+  for (byte a = 1; a < 127; a++) {
+    Wire.beginTransmission(a);
+    if (Wire.endTransmission() == 0) {
+      Serial.print(F(" 0x"));
+      Serial.print(a, HEX);
+      any = true;
+    }
+  }
+  if (!any) Serial.print(F(" none found (check SDA/SCL wires and power)"));
+  Serial.println();
+}
+
+int readAveraged(int pin) {
+  analogRead(pin);  // throw away the first read so the ADC input settles
+  delay(2);
+  long sum = 0;
+  for (int i = 0; i < samples; i++) {
+    sum += analogRead(pin);
+    delay(1);
+  }
+  return (int)(sum / samples);
+}
+
+void sendReading() {
+  int rawMoisture = readAveraged(moisturePin);
+  int rawPh = readAveraged(phPin);
+
+  // A reading stuck near 0 or 1023 means the sensor is unpowered or a wire is loose.
+  // Report -1 instead of a fake percentage (the dashboard flags it as a bad reading).
+  float moisture = -1;
+  if (rawMoisture >= 15 && rawMoisture <= 1010 && MOIST_WET != MOIST_DRY) {
+    moisture = (rawMoisture - MOIST_DRY) * 100.0 / (MOIST_WET - MOIST_DRY);
+    moisture = constrain(moisture, 0, 100);
+  }
+
+  float volts = rawPh * ADC_REF / 1023.0;
+  float ph = constrain(PH_SLOPE * volts + PH_OFFSET, 0, 14);
+
+  showOnDisplay(ph, moisture < 0 ? -1 : (int)moisture);
+
+  // temperature / humidity: no DHT sensor wired, so these are fixed placeholders
+  Serial.print(F("{\"ph\":"));          Serial.print(ph, 2);
+  Serial.print(F(",\"moisture\":"));    Serial.print(moisture < 0 ? -1 : (int)moisture);
+  Serial.print(F(",\"temperature\":25.0,\"humidity\":60"));
+  Serial.print(F(",\"raw_ph\":"));      Serial.print(rawPh);
+  Serial.print(F(",\"raw_moisture\":")); Serial.print(rawMoisture);
+  Serial.println(F("}"));
+}
+
+void runCommand(String c) {
+  c.trim();
+  c.toUpperCase();
+  if (c.startsWith("RATE ")) {
+    sendEveryMs = constrain(c.substring(5).toInt(), 100, 10000);
+    Serial.print(F("# rate ms = ")); Serial.println(sendEveryMs);
+  } else if (c.startsWith("AVG ")) {
+    samples = constrain(c.substring(4).toInt(), 1, 50);
+    Serial.print(F("# avg samples = ")); Serial.println(samples);
+  } else if (c == "SCAN") {
+    scanI2C();
+  } else if (c == "TEST" || c == "TEST 0" || c == "TEST 1") {
+    int pin = (c == "TEST 1") ? A1 : A0;
+    analogRead(pin); delay(2);
+    int plain = readAveraged(pin);
+    pinMode(pin, INPUT_PULLUP); delay(5);
+    analogRead(pin);
+    int pulled = readAveraged(pin);
+    pinMode(pin, INPUT); delay(30);
+    Serial.print(F("# test A")); Serial.print(pin == A1 ? 1 : 0);
+    Serial.print(F(" plain=")); Serial.print(plain);
+    Serial.print(F(" pullup=")); Serial.print(pulled);
+    if (pulled > 1000) Serial.println(F(" -> NOT CONNECTED (floating)"));
+    else if (pulled < 15) Serial.println(F(" -> stuck at GND (shorted, or sensor has no power)"));
+    else Serial.println(F(" -> driven by something"));
+  } else if (c == "INFO") {
+    Serial.print(F("# rate=")); Serial.print(sendEveryMs);
+    Serial.print(F(" avg="));   Serial.print(samples);
+    Serial.print(F(" dry="));   Serial.print(MOIST_DRY);
+    Serial.print(F(" wet="));   Serial.print(MOIST_WET);
+    Serial.print(F(" phSlope=")); Serial.print(PH_SLOPE);
+    Serial.print(F(" phOffset=")); Serial.print(PH_OFFSET);
+    Serial.print(F(" displayType=")); Serial.println(DISPLAY_TYPE);
+  } else {
+    Serial.print(F("# unknown command: ")); Serial.println(c);
+  }
+}
+
+void handleSerial() {
+  while (Serial.available()) {
+    char ch = Serial.read();
+    if (ch == '\n' || ch == '\r') {
+      if (cmd.length() > 0) {
+        runCommand(cmd);
+        cmd = "";
+      }
+    } else if (cmd.length() < 24) {
+      cmd += ch;
+    }
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+  Wire.setWireTimeout(3000, true);   // a glitch on the display wires must not freeze the board
+  displayBegin();
+  wdt_enable(WDTO_2S);               // restart automatically if loop() stops for 2 s
+}
+
+void loop() {
+  wdt_reset();
+  handleSerial();
+  if (millis() - lastSend >= sendEveryMs) {
+    lastSend = millis();
+    sendReading();
+  }
+}
+`;
+
+function sketchValues() {
+  const out = { MOIST_DRY: 560, MOIST_WET: 280, PH_SLOPE: -5.56, PH_OFFSET: 20.89, ADC_REF: state.adcRef };
+  const notes = [];
+  const fm = fitChannel(CH.moisture);
+  if (fm && !fm.error) { out.MOIST_DRY = -fm.b / fm.m; out.MOIST_WET = (100 - fm.b) / fm.m; notes.push('moisture: your calibration'); }
+  else notes.push('moisture: default values (not calibrated)');
+  const fp = fitChannel(CH.ph);
+  if (fp && !fp.error) { out.PH_SLOPE = fp.m; out.PH_OFFSET = fp.b; notes.push('pH: your calibration'); }
+  else notes.push('pH: typical-module default values (not calibrated)');
+  return { out, notes };
+}
+function sketchText() {
+  const { out } = sketchValues();
+  return SKETCH_TEMPLATE
+    .split('__MOIST_DRY__').join(out.MOIST_DRY.toFixed(1))
+    .split('__MOIST_WET__').join(out.MOIST_WET.toFixed(1))
+    .split('__PH_SLOPE__').join(out.PH_SLOPE.toFixed(4))
+    .split('__PH_OFFSET__').join(out.PH_OFFSET.toFixed(4))
+    .split('__ADC_REF__').join(out.ADC_REF.toFixed(2));
+}
+function renderSketch() {
+  $('#sketchCode').textContent = sketchText();
+  $('#sketchStatus').textContent = 'Baked in: ' + sketchValues().notes.join(' · ') + '.';
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {
+    try { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return ok; } catch (e2) { return false; }
+  }
+}
+function download(name, text) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ---------- serial monitor ---------- */
+const logEl = $('#log');
+const lines = []; let held = []; let paused = false; const MAXLINES = 1500;
+function addLine(kind, text) {
+  const rec = { t: new Date(), kind, text };
+  if (paused) { held.push(rec); if (held.length > 5000) held.shift(); updatePauseBtn(); return; }
+  appendRec(rec);
+}
+function appendRec(rec) {
+  const el = document.createElement('div');
+  el.className = 'ln ' + rec.kind;
+  const ts = document.createElement('span'); ts.className = 'ts'; ts.textContent = stamp(rec.t); ts.hidden = !$('#optTs').checked;
+  el.append(ts, document.createTextNode((rec.kind === 'tx' ? '→ ' : '') + rec.text));
+  rec.el = el; lines.push(rec);
+  applyFilterTo(rec);
+  logEl.appendChild(el);
+  while (lines.length > MAXLINES) { lines.shift().el.remove(); }
+  if ($('#optScroll').checked) logEl.scrollTop = logEl.scrollHeight;
+}
+function applyFilterTo(rec) { const f = $('#filter').value.trim().toLowerCase(); rec.el.hidden = !!f && !rec.text.toLowerCase().includes(f); }
+function updatePauseBtn() { $('#btnPause').textContent = paused ? `Resume${held.length ? ' (' + held.length + ' new)' : ''}` : 'Pause'; }
+
+let rxBuf = '';
+function feed(chunk) {
+  rxBuf += chunk;
+  const parts = rxBuf.split(/\r\n|\n|\r/);
+  rxBuf = parts.pop();
+  if (rxBuf.length > 2000) rxBuf = '';
+  for (const p of parts) {
+    if (!p.trim()) continue;
+    addLine(p.trim()[0] === '#' ? 'cmt' : 'rx', p);
+    const o = parseLine(p); if (o) ingest(o);
+  }
+}
+
+/* ---------- Web Serial connection ---------- */
+const serialOK = 'serial' in navigator;
+let port = null, reader = null, readableClosed = null, reading = false, userClosing = false;
+const bridge = { on: false, es: null, port: '' };
+const connectionActive = () => !!port || demo.on || bridge.on;
+
+function setStatus(stateName, text) { $('#status').dataset.state = stateName; $('#statusText').textContent = text; }
+function updateButtons() {
+  $('#btnConnect').textContent = port ? 'Disconnect' : 'Connect Arduino';
+  $('#btnConnect').classList.toggle('primary', !port);
+  $('#btnDemo').textContent = demo.on ? 'Stop demo' : 'Demo mode';
+  $('#demoBox').hidden = !demo.on;
+}
+
+async function connect() {
+  if (demo.on) stopDemo();
+  let p;
+  try { p = await navigator.serial.requestPort(); }
+  catch (e) { if (e.name !== 'NotFoundError') addLine('err', 'Port selection failed: ' + e.message); return; }
+  try { await p.open({ baudRate: parseInt($('#baud').value, 10) }); }
+  catch (e) {
+    addLine('err', `Could not open the port (${e.message}). Close the Arduino IDE Serial Monitor, the FarmAssist dashboard tab, and any other app using it, then try again.`);
+    toast('Could not open the port. Is something else using it?');
+    return;
+  }
+  port = p; userClosing = false; rxBuf = '';
+  addLine('sys', `Port open at ${$('#baud').value} baud. An Uno restarts when you connect, so expect a blank gap or one garbled line for ~2 s.`);
+  updateButtons(); setStatus('wait', 'Connected · waiting for data');
+  readLoop(p);
+}
+
+async function readLoop(p) {
+  reading = true;
+  try {
+    const decoder = new TextDecoderStream();
+    readableClosed = p.readable.pipeTo(decoder.writable).catch(() => {});
+    reader = decoder.readable.getReader();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) feed(value);
+    }
+  } catch (e) {
+    if (!userClosing) addLine('err', 'Read error: ' + e.message);
+  } finally {
+    try { reader && reader.releaseLock(); } catch (e) { /* ignore */ }
+    reader = null; reading = false;
+  }
+  if (!userClosing && port === p) { await closePort(); addLine('err', 'Connection lost (cable unplugged or board reset by another program).'); }
+}
+
+async function closePort() {
+  const p = port; if (!p) return;
+  userClosing = true;
+  try { if (reader) await reader.cancel(); } catch (e) { /* ignore */ }
+  try { if (readableClosed) await readableClosed; } catch (e) { /* ignore */ }
+  try { await p.close(); } catch (e) { /* ignore */ }
+  port = null; reader = null; readableClosed = null;
+  updateButtons(); setStatus('off', 'Disconnected');
+  if (capture) finishCaptureAbort();
+}
+function finishCaptureAbort() { const c = capture; capture = null; clearInterval(c.timer); $('#cap-' + c.ch.id).disabled = false; renderCalLive(); toast('Capture cancelled: connection closed'); }
+
+async function sendCommand(text) {
+  const eol = $('#eol').value;
+  if (bridge.on) {
+    try {
+      const r = await fetch('/api/send', { method: 'POST', headers: { 'X-Lab': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+      if (!(await r.json()).ok) addLine('err', 'Bridge could not send (board not connected?)');
+    } catch (e) { addLine('err', 'Bridge unreachable: ' + e.message); }
+    return;
+  }
+  if (demo.on) { addLine('tx', text); demoReply(text); return; }
+  if (!port || !port.writable) { toast('Not connected'); return; }
+  const w = port.writable.getWriter();
+  try { await w.write(new TextEncoder().encode(text + eol)); addLine('tx', text); }
+  catch (e) { addLine('err', 'Send failed: ' + e.message); }
+  finally { w.releaseLock(); }
+}
+
+if (serialOK) {
+  navigator.serial.addEventListener('disconnect', e => {
+    if (port && e.target === port) { addLine('err', 'USB device unplugged.'); closePort(); }
+  });
+} else {
+  $('#noSerial').hidden = false; $('#btnConnect').disabled = true;
+  $('#btnConnect').title = 'Web Serial not supported in this browser';
+}
+
+/* ---------- bridge (python owns the port; page + scripts share it) ---------- */
+const BRIDGE_HDR = { 'X-Lab': '1', 'Content-Type': 'application/json' };
+async function tryBridge() {
+  let st;
+  try {
+    const r = await fetch('/api/status', { cache: 'no-store' });
+    if (!r.ok) return;
+    st = await r.json();
+    if (!st.bridge) return;
+  } catch (e) { return; }             // not served by the bridge: normal Web Serial mode
+  bridge.on = true; bridge.port = st.port;
+  $('#btnConnect').hidden = true; $('#baud').hidden = true; $('label[for=baud]').hidden = true; $('#btnDemo').hidden = true;
+  $('#btnFlash').hidden = false;
+  try {                               // shared calibration: bridge file wins if it has points
+    const remote = await (await fetch('/api/state', { cache: 'no-store' })).json();
+    const has = remote && remote.cal && ((remote.cal.moisture || []).length || (remote.cal.ph || []).length);
+    if (has) {
+      for (const k of ['moisture', 'ph']) if (Array.isArray(remote.cal[k])) state.cal[k] = remote.cal[k].filter(p => Number.isFinite(p.raw) && Number.isFinite(p.ref));
+      if (Number.isFinite(remote.adcRef)) state.adcRef = remote.adcRef;
+      $('#adcRef').value = state.adcRef.toFixed(2);
+    } else saveState();
+  } catch (e) { /* ignore */ }
+  renderCal(); renderSketch(); scheduleRender();
+  addLine('sys', `Bridge connected: Python owns ${st.port}. Close nothing else; this page, the console and scripts all share it.`);
+  const es = new EventSource('/api/stream?since=' + Math.max(0, st.seq - 60));
+  bridge.es = es;
+  es.onmessage = ev => {
+    const r = JSON.parse(ev.data);
+    if (r.kind === 'rx' || r.kind === 'cmt') feed(r.text + '\n');
+    else addLine(r.kind, r.text);
+  };
+  es.onerror = () => setStatus('wait', 'Bridge unreachable, retrying…');
+}
+$('#btnFlash').addEventListener('click', async () => {
+  const b = $('#btnFlash'); b.disabled = true; toast('Compiling and uploading… about 20 s');
+  try {
+    const r = await fetch('/api/flash', { method: 'POST', headers: BRIDGE_HDR, body: JSON.stringify({ sketch: sketchText() }) });
+    const j = await r.json();
+    addLine(j.ok ? 'sys' : 'err', (j.ok ? 'Upload OK.' : 'Upload FAILED.') + '\n' + (j.log || ''));
+    toast(j.ok ? 'Uploaded. The board restarts.' : 'Upload failed: see the serial monitor');
+  } catch (e) { addLine('err', 'Upload request failed: ' + e.message); }
+  b.disabled = false;
+});
+
+/* ---------- demo (simulated board) ---------- */
+const demo = { on: false, timer: null, moist: 40, ph: 6.5, loose: false, rate: 500, avg: 10 };
+function demoTick() {
+  const noise = () => (Math.random() - 0.5) * 3;
+  let rawM = 760 - 4.5 * demo.moist + noise();
+  const volts = 2.5 - 0.18 * (demo.ph - 7);
+  let rawP = volts / 5 * 1023 + noise();
+  if (demo.loose && Math.random() < 0.3) rawM = [0, 1023, rawM + (Math.random() - 0.5) * 400][Math.floor(Math.random() * 3)];
+  rawM = clamp(Math.round(rawM), 0, 1023); rawP = clamp(Math.round(rawP), 0, 1023);
+  const m = clamp((rawM - 1023) * 100 / (300 - 1023), 0, 100);
+  const ph = clamp(-5.56 * (rawP * 5 / 1023) + 20.89, 0, 14);
+  feed(`{"ph":${ph.toFixed(2)},"moisture":${Math.round(m)},"temperature":25.0,"humidity":60,"raw_ph":${rawP},"raw_moisture":${rawM}}\n`);
+}
+function demoReply(text) {
+  const c = text.trim().toUpperCase();
+  if (c.startsWith('RATE ')) { demo.rate = clamp(parseInt(c.slice(5), 10) || 500, 100, 10000); restartDemoTimer(); feed(`# rate ms = ${demo.rate}\n`); }
+  else if (c.startsWith('AVG ')) { demo.avg = clamp(parseInt(c.slice(4), 10) || 10, 1, 50); feed(`# avg samples = ${demo.avg}\n`); }
+  else if (c === 'INFO') feed(`# rate=${demo.rate} avg=${demo.avg} dry=1023.00 wet=300.00 phSlope=-5.56 phOffset=20.89 (demo)\n`);
+  else feed(`# unknown command: ${c}\n`);
+}
+function restartDemoTimer() { clearInterval(demo.timer); demo.timer = setInterval(demoTick, demo.rate); }
+async function startDemo() {
+  if (port) await closePort();
+  demo.on = true; rxBuf = '';
+  addLine('sys', 'Demo mode: simulated Arduino. Nothing here comes from real hardware.');
+  restartDemoTimer(); updateButtons(); setStatus('demo', 'Demo · simulated');
+}
+function stopDemo() {
+  demo.on = false; clearInterval(demo.timer);
+  if (capture) finishCaptureAbort();
+  updateButtons(); setStatus('off', 'Disconnected');
+  addLine('sys', 'Demo stopped.');
+}
+
+/* ---------- wiring up the UI ---------- */
+$('#btnConnect').addEventListener('click', () => { port ? closePort().then(() => addLine('sys', 'Port closed.')) : connect(); });
+$('#btnDemo').addEventListener('click', () => { demo.on ? stopDemo() : startDemo(); });
+$('#demoMoist').addEventListener('input', e => { demo.moist = +e.target.value; $('#demoMoistVal').textContent = demo.moist + ' %'; });
+$('#demoPh').addEventListener('input', e => { demo.ph = +e.target.value; $('#demoPhVal').textContent = demo.ph.toFixed(1); });
+$('#demoLoose').addEventListener('change', e => { demo.loose = e.target.checked; });
+
+$$('.tab').forEach(t => t.addEventListener('click', () => {
+  $$('.tab').forEach(x => x.setAttribute('aria-selected', String(x === t)));
+  $$('.panel').forEach(p => p.hidden = p.id !== 'panel-' + t.dataset.tab);
+  if (t.dataset.tab === 'live') scheduleRender();
+}));
+
+$('#filterN').addEventListener('input', e => { state.filterN = +e.target.value; $('#filterNVal').textContent = state.filterN; saveState(); scheduleRender(); });
+$('#autoZoom').addEventListener('change', e => { state.autoZoom = e.target.checked; saveState(); scheduleRender(); });
+$('#adcRef').addEventListener('change', e => {
+  const v = parseFloat(e.target.value);
+  if (Number.isFinite(v) && v >= 3 && v <= 5.5) { state.adcRef = v; saveState(); renderCal(); renderSketch(); scheduleRender(); }
+  else e.target.value = state.adcRef.toFixed(2);
+});
+
+$('#btnCopy').addEventListener('click', async () => toast((await copyText(sketchText())) ? 'Sketch copied. Paste it into the Arduino IDE.' : 'Copy failed: select the text and copy manually'));
+$('#btnDownload').addEventListener('click', () => { download('sensor_lab.ino', sketchText()); toast('Saved sensor_lab.ino (keep it inside a folder named sensor_lab)'); });
+
+$('#btnPause').addEventListener('click', () => {
+  paused = !paused;
+  if (!paused) { const h = held; held = []; h.forEach(appendRec); }
+  updatePauseBtn();
+});
+$('#btnClear').addEventListener('click', () => { lines.splice(0).forEach(r => r.el.remove()); held = []; updatePauseBtn(); });
+$('#btnSave').addEventListener('click', () => {
+  const text = lines.map(r => `${stamp(r.t)} ${r.kind === 'tx' ? '> ' : ''}${r.text}`).join('\n');
+  if (!text) { toast('Nothing to save yet'); return; }
+  download(`serial-log-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`, text);
+});
+$('#filter').addEventListener('input', () => lines.forEach(applyFilterTo));
+$('#optTs').addEventListener('change', e => lines.forEach(r => { r.el.firstChild.hidden = !e.target.checked; }));
+
+const hist = []; let hi = -1;
+$('#sendForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const t = $('#sendText').value; if (!t.trim()) return;
+  hist.unshift(t); hi = -1; $('#sendText').value = '';
+  sendCommand(t);
+});
+$('#sendText').addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp' && hist.length) { hi = Math.min(hist.length - 1, hi + 1); e.target.value = hist[hi]; e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { hi = Math.max(-1, hi - 1); e.target.value = hi >= 0 ? hist[hi] : ''; e.preventDefault(); }
+});
+$$('button[data-cmd]').forEach(b => b.addEventListener('click', () => sendCommand(b.dataset.cmd)));
+
+/* header status ticker: tells you when the data stops flowing */
+setInterval(() => {
+  if (demo.on) { setStatus('demo', `Demo · ${sampleCount} readings`); return; }
+  if (bridge.on) {
+    if ((bridge.polls = (bridge.polls || 0) + 1) % 3 === 0) fetch('/api/status', { cache: 'no-store' }).then(r => r.json()).then(s => { if (s.port) bridge.port = s.port; }).catch(() => {});
+    const a = (Date.now() - lastSampleAt) / 1000;
+    if (!lastSampleAt || a > 4) setStatus('wait', `Bridge ${bridge.port} · no data${lastSampleAt ? ' for ' + a.toFixed(0) + ' s' : ' yet'}`);
+    else setStatus('on', `Bridge ${bridge.port} · ${sampleCount} readings`);
+    return;
+  }
+  if (!port) return;
+  const age = (Date.now() - lastSampleAt) / 1000;
+  if (!lastSampleAt || age > 4) setStatus('wait', `Connected ${$('#baud').value} · no data${lastSampleAt ? ' for ' + age.toFixed(0) + ' s' : ' yet'}`);
+  else setStatus('on', `Connected ${$('#baud').value} · ${sampleCount} readings`);
+}, 1000);
+
+window.addEventListener('resize', scheduleRender);
+window.addEventListener('beforeunload', () => { if (port) { try { port.close(); } catch (e) { /* ignore */ } } });
+
+/* ---------- init ---------- */
+loadState();
+buildLiveCards(); buildCalCards();
+$('#adcRef').value = state.adcRef.toFixed(2);
+$('#filterN').value = state.filterN; $('#filterNVal').textContent = state.filterN;
+$('#autoZoom').checked = state.autoZoom;
+renderCal(); renderSketch(); renderLive(); renderCalLive();
+addLine('sys', 'Ready. Click "Connect Arduino" (Chrome/Edge) or try "Demo mode".');
+tryBridge();
+</script>
+<script>
+'use strict';
+/* ---------- Steps tab: per-step breadboard layout + upload + live check ---------- */
+/* Breadboard drawn as in Components pics/Breadboard.jpg (portrait):
+   60 numbered rows, a-e | channel | f-j, plus two UNMARKED side strips with 2 lines each.
+   Each numbered row: a-e joined, f-j joined (runs ACROSS). Each strip line: joined DOWN its length,
+   holes in groups of 5 with a bigger gap at the middle -> may be split, so we only use the top half (rows 32-60). */
+(() => {
+  const COL = { v5: '#e8890c', gnd: '#2b2b2b', sda: '#2b6cb0', scl: '#2f9e44', aout: '#d4a800', po: '#c2185b' };
+  const COL_NAME = { v5: '5V', gnd: 'GND', sda: 'SDA → A4', scl: 'SCL → A5', aout: 'Moisture AOUT → A1', po: 'pH Po → A0' };
+  const ROW_Y = r => 840 - (r - 1) * 13;
+  const L_OUT = 366, L_IN = 381;                       // left strip: outer line = GND, inner line = 5V (our choice)
+  const R_OUT = 599, R_IN = 586;
+  const COLS = { a: 412, b: 425, c: 438, d: 451, e: 464, f: 504, g: 517, h: 530, i: 543, j: 556 };
+  const SIDE_ROWS = [];
+  for (const s of [1, 7, 13, 19, 25, 32, 38, 44, 50, 56]) for (let k = 0; k < 5; k++) SIDE_ROWS.push(s + k);
+  const PIN_X = 282, UNO_PIN_X = 712;
+  const UNO = { IOREF: 290, RESET: 310, '3V3': 330, '5V': 350, GND: 370, 'GND ': 390, VIN: 410, A0: 450, A1: 470, A2: 490, A3: 510, A4: 530, A5: 550 };
+
+  const MODS = {
+    ph:    { y: 30, h: 182, title: 'pH board (PH-4502C)', sub: 'BNC → glass probe', pins: [['To', 55, 1], ['Do', 80, 1], ['Po', 105], ['G', 130], ['G', 155], ['V+', 180]] },
+    moist: { y: 290, h: 106, title: 'Moisture HW-390', sub: 'cable: black · red · yellow', pins: [['GND', 320], ['VCC', 345], ['AOUT', 370]] },
+    lcd:   { y: 470, h: 130, title: '16×2 LCD + I2C', sub: 'PCF8574 backpack · 0x27', pins: [['GND', 500], ['VCC', 525], ['SDA', 550], ['SCL', 575]] },
+  };
+  const stripHole = (line, row) => `Left strip, ${line === L_IN ? 'inner line (5V)' : 'outer line (GND)'}, level with row ${row}`;
+  // kind: pw = module pin -> strip hole; feed = Uno pin -> strip hole; sig = module pin -> Uno pin (direct jumper)
+  const W = {
+    feed5v:  { kind: 'feed', c: 'v5',  mod: null,    y1: UNO['5V'], x2: L_IN,  row: 46, from: 'Uno 5V' },
+    feedgnd: { kind: 'feed', c: 'gnd', mod: null,    y1: UNO.GND,   x2: L_OUT, row: 44, from: 'Uno GND' },
+    lcd_gnd: { kind: 'pw',   c: 'gnd', mod: 'lcd',   y1: 500, x2: L_OUT, row: 33, from: 'LCD GND' },
+    lcd_vcc: { kind: 'pw',   c: 'v5',  mod: 'lcd',   y1: 525, x2: L_IN,  row: 32, from: 'LCD VCC' },
+    sda:     { kind: 'sig',  c: 'sda', mod: 'lcd',   y1: 550, y2: UNO.A4, from: 'LCD SDA', to: 'Uno A4 (direct, F-M jumper)' },
+    scl:     { kind: 'sig',  c: 'scl', mod: 'lcd',   y1: 575, y2: UNO.A5, from: 'LCD SCL', to: 'Uno A5 (direct, F-M jumper)' },
+    m_gnd:   { kind: 'pw',   c: 'gnd', mod: 'moist', y1: 320, x2: L_OUT, row: 42, from: 'Moisture GND (black)' },
+    m_vcc:   { kind: 'pw',   c: 'v5',  mod: 'moist', y1: 345, x2: L_IN,  row: 40, from: 'Moisture VCC (red)' },
+    aout:    { kind: 'sig',  c: 'aout', mod: 'moist', y1: 370, y2: UNO.A1, from: 'Moisture AOUT (yellow)', to: 'Uno A1 (direct)' },
+    po:      { kind: 'sig',  c: 'po',  mod: 'ph',    y1: 105, y2: UNO.A0, from: 'pH Po', to: 'Uno A0 (direct, F-M jumper)' },
+    ph_g1:   { kind: 'pw',   c: 'gnd', mod: 'ph',    y1: 130, x2: L_OUT, row: 54, from: 'pH G (1st)' },
+    ph_g2:   { kind: 'pw',   c: 'gnd', mod: 'ph',    y1: 155, x2: L_OUT, row: 52, from: 'pH G (2nd)' },
+    ph_v:    { kind: 'pw',   c: 'v5',  mod: 'ph',    y1: 180, x2: L_IN,  row: 50, from: 'pH V+' },
+  };
+  for (const w of Object.values(W)) if (w.row) { w.y2 = ROW_Y(w.row); w.to = stripHole(w.x2, w.row); }
+
+  const STEPS = [
+    { n: 0, short: '0 · Board', title: 'Step 0 · Board check (nothing wired)', test: '00_board_check', mods: [], wires: [], fresh: [],
+      note: 'Only the USB cable. Replaces Blink: the bridge uploads it, and the dashboard shows the live 5 V rail.',
+      pass: ['On-board "L" LED blinks once a second', 'Live check shows uptime counting and Vcc between 4.75 and 5.25 V (USB spec; internal reference is ±0.1 V)'] },
+    { n: 1, short: '1 · I2C scan', title: 'Step 1 · LCD wiring + I2C scan', test: '01_i2c_scanner', mods: ['lcd'],
+      wires: ['feed5v', 'feedgnd', 'lcd_gnd', 'lcd_vcc', 'sda', 'scl'], fresh: ['feed5v', 'feedgnd', 'lcd_gnd', 'lcd_vcc', 'sda', 'scl'],
+      note: 'First mark the LEFT side strip: inner line (next to column a) = 5V, outer line = GND (a dot of red/black marker at the top). Use only the TOP half (rows 32–60). Power goes through the strip; SDA/SCL go straight from the LCD to the Uno.',
+      pass: ['Live check finds 1 device, address 0x27 (or 0x3F)', 'LCD backlight is on'] },
+    { n: 2, short: '2 · LCD', title: 'Step 2 · LCD text', test: '02_lcd_test', mods: ['lcd'],
+      wires: ['feed5v', 'feedgnd', 'lcd_gnd', 'lcd_vcc', 'sda', 'scl'], fresh: [],
+      note: 'No rewiring. If the backlight is on but the screen is blank or shows solid blocks, turn the blue contrast pot on the backpack slowly.',
+      pass: ['LCD line 1 reads "Smart Soil"', 'LCD line 2 counts seconds, matching the uptime here'] },
+    { n: 3, short: '3 · Moisture', title: 'Step 3 · Capacitive moisture sensor', test: '03_moisture_test', mods: ['lcd', 'moist'],
+      wires: ['feed5v', 'feedgnd', 'lcd_gnd', 'lcd_vcc', 'sda', 'scl', 'm_gnd', 'm_vcc', 'aout'], fresh: ['m_gnd', 'm_vcc', 'aout'],
+      note: 'The sensor cable ends in a 3-pin female plug: use 3 male-male jumpers. Black → strip outer (GND), red → strip inner (5V), yellow → Uno A1. Only dip the sensor up to the white line.',
+      pass: ['In air: raw ≈ 450–600', 'In a glass of water: raw ≈ 200–350 (drops by a few hundred)', 'Write both numbers into the log'] },
+    { n: 4, short: '4 · pH', title: 'Step 4 · pH board + supply voltage', test: '04_ph_voltage_test', mods: ['lcd', 'moist', 'ph'],
+      wires: ['feed5v', 'feedgnd', 'lcd_gnd', 'lcd_vcc', 'sda', 'scl', 'm_gnd', 'm_vcc', 'aout', 'ph_g1', 'ph_g2', 'ph_v', 'po'], fresh: ['ph_g1', 'ph_g2', 'ph_v', 'po'],
+      note: 'Do NOT push the pH board\'s 6 header pins into one numbered row: a row joins its 5 holes, so all pins would be shorted together. Use F-F / F-M jumpers instead. To and Do stay unconnected. Offset: unscrew the probe, short the BNC centre pin to the BNC shell (never to GND), turn the trimmer that moves Po to 2.50 V.',
+      pass: ['Vcc 4.75–5.25 V (this is the voltage the pH board gets)', 'BNC shorted: Po = 2.50 V ± 0.02 after adjusting', 'Noise under ~20 mV'] },
+    { n: 5, short: '5 · MAX485', title: 'Step 5 · MAX485 (skipped)', test: null, mods: [], wires: [], fresh: [], skip: true,
+      note: 'Skipped for now. Our pH kit is analog (Po → A0), so the MAX485 is not needed. Kept for a future RS-485 NPK sensor.', pass: ['Nothing to do'] },
+    { n: 6, short: '6 · Final', title: 'Step 6 · Final firmware (exhibition)', test: 'soil_analyzer', mods: ['lcd', 'moist', 'ph'],
+      wires: ['feed5v', 'feedgnd', 'lcd_gnd', 'lcd_vcc', 'sda', 'scl', 'm_gnd', 'm_vcc', 'aout', 'ph_g1', 'ph_g2', 'ph_v', 'po'],
+      fresh: ['feed5v', 'feedgnd', 'lcd_gnd', 'lcd_vcc', 'sda', 'scl', 'm_gnd', 'm_vcc', 'aout', 'ph_g1', 'ph_g2', 'ph_v', 'po'],
+      note: 'Complete wiring reference: all 13 wires (same as step 4). Loads hardware/firmware/soil_analyzer: calibrated pH (3-point, saved in the board) + calibrated moisture + self-healing LCD. Sends {"ph","moisture","temperature","humidity",…} for the web app. Temperature/humidity are fixed assumed values (no sensor).',
+      pass: ['LCD line 1 "pH x.xx Neutral/Acidic/…", line 2 "Moisture N%"', 'Probe in pH 7.00 buffer reads 7.00 ± 0.05', 'Probe out of liquid: LCD says "pH: dip probe" and no pH is sent', 'Web app (Connect Arduino) shows the same pH and moisture'] },
+  ];
+
+  function wirePath(w) {
+    if (w.kind === 'pw') return `M${PIN_X} ${w.y1} L${w.x2} ${w.y2}`;
+    if (w.kind === 'feed') return `M${UNO_PIN_X} ${w.y1} C640 ${w.y1}, 470 ${w.y2}, ${w.x2} ${w.y2}`;
+    return `M${PIN_X} ${w.y1} C482 ${w.y1}, 562 ${w.y2}, ${UNO_PIN_X} ${w.y2}`;
+  }
+  function endpoints(w) {
+    if (w.kind === 'pw') return [[w.x2, w.y2]];
+    if (w.kind === 'feed') return [[w.x2, w.y2], [UNO_PIN_X, w.y1]];
+    return [[UNO_PIN_X, w.y2]];
+  }
+
+  function drawBreadboard(p) {
+    p.push('<rect x="352" y="46" width="258" height="826" rx="6" fill="#f4f4f1" stroke="#c9c9c2"/>');
+    for (const [x, w] of [[354, 39], [397, 81], [491, 81], [576, 32]]) p.push(`<rect x="${x}" y="50" width="${w}" height="818" rx="3" fill="#fbfbf8" stroke="#dedbd2"/>`);
+    p.push('<rect x="479" y="50" width="11" height="818" fill="#e9e8e2"/>');
+    const hole = (x, y) => `<rect x="${x - 2.5}" y="${y - 2.5}" width="5" height="5" fill="#55534d"/>`;
+    for (let r = 1; r <= 60; r++) for (const x of Object.values(COLS)) p.push(hole(x, ROW_Y(r)));
+    for (const r of SIDE_ROWS) for (const x of [L_OUT, L_IN, R_IN, R_OUT]) p.push(hole(x, ROW_Y(r)));
+    for (const r of [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]) p.push(`<text x="403" y="${ROW_Y(r) + 2.5}" font-size="7" fill="#9a968c" text-anchor="middle">${r}</text>`);
+    for (const [k, x] of Object.entries(COLS)) p.push(`<text x="${x}" y="864" font-size="8" fill="#9a968c" text-anchor="middle">${k.toUpperCase()}</text>`);
+    // where the strips may be split
+    p.push(`<line x1="354" y1="${ROW_Y(30.5)}" x2="393" y2="${ROW_Y(30.5)}" stroke="#d9473f" stroke-width="1.2" stroke-dasharray="3 2"/>`);
+    p.push(`<line x1="576" y1="${ROW_Y(30.5)}" x2="608" y2="${ROW_Y(30.5)}" stroke="#d9473f" stroke-width="1.2" stroke-dasharray="3 2"/>`);
+  }
+
+  function drawUno(p, blink) {
+    p.push('<rect x="790" y="228" width="60" height="30" rx="3" fill="#9aa0a6"/><text x="820" y="222" font-size="10" fill="#8a8476" text-anchor="middle">USB → laptop</text>');
+    p.push('<rect x="880" y="236" width="44" height="22" rx="3" fill="#222"/>');
+    p.push('<rect x="700" y="250" width="250" height="470" rx="10" fill="#0e6f8c" stroke="#09566c"/>');
+    p.push('<rect x="705" y="280" width="14" height="280" rx="2" fill="#1b1b1b"/>');
+    for (const [k, y] of Object.entries(UNO)) {
+      p.push(`<rect x="${UNO_PIN_X - 4}" y="${y - 4}" width="8" height="8" fill="#d9d9d9"/>`);
+      p.push(`<text x="726" y="${y + 3.5}" font-size="10" fill="#e8f4f8">${k.trim()}</text>`);
+    }
+    p.push('<rect x="931" y="300" width="14" height="300" rx="2" fill="#1b1b1b"/>');
+    for (let i = 0; i < 14; i++) p.push(`<rect x="934" y="${588 - i * 20}" width="8" height="8" fill="#d9d9d9"/>`);
+    p.push('<text x="925" y="618" font-size="9" fill="#bfe3ee" text-anchor="end">D0–D13</text>');
+    p.push('<text x="850" y="500" font-size="20" font-weight="700" fill="#e8f4f8" text-anchor="middle" transform="rotate(-90 850 500)">ARDUINO UNO</text>');
+    p.push(`<circle cx="905" cy="290" r="5" fill="${blink ? '#ffb300' : '#c9a227'}"/><text x="893" y="294" font-size="10" fill="#e8f4f8" text-anchor="end">L</text>`);
+  }
+
+  function draw(step) {
+    const p = ['<svg viewBox="0 0 980 890" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block" font-family="system-ui,Segoe UI,sans-serif">'];
+    drawBreadboard(p);
+    drawUno(p, step.n === 0);
+    // strip polarity callout (the board itself has no markings)
+    p.push(`<text x="373" y="20" font-size="10.5" fill="#8a8476" text-anchor="middle">left strip (unmarked):</text>`);
+    p.push(`<text x="373" y="36" font-size="10.5" text-anchor="middle"><tspan fill="#8a8476">outer </tspan><tspan fill="#555" font-weight="700">GND</tspan><tspan fill="#8a8476"> · inner </tspan><tspan fill="${COL.v5}" font-weight="700">5V</tspan></text>`);
+    for (const id of step.mods) {
+      const m = MODS[id];
+      const isNew = step.fresh.some(f => W[f].mod === id);
+      p.push(`<rect x="20" y="${m.y}" width="250" height="${m.h}" rx="8" fill="#1f5fa8" stroke="${isNew ? '#ffd54f' : '#174a84'}" stroke-width="${isNew ? 2.5 : 1}"/>`);
+      p.push(`<text x="34" y="${m.y + 22}" font-size="13" font-weight="700" fill="#fff">${m.title}</text>`);
+      p.push(`<text x="34" y="${m.y + 38}" font-size="10.5" fill="#cfe0f5">${m.sub}</text>`);
+      for (const [lab, y, unused] of m.pins) {
+        p.push(`<rect x="270" y="${y - 5}" width="12" height="10" fill="${unused ? '#7d8a99' : '#e6e6e6'}"/>`);
+        p.push(`<text x="262" y="${y + 3.5}" font-size="10.5" font-weight="600" fill="${unused ? '#9fb6d2' : '#fff'}" text-anchor="end">${lab}${unused ? ' (n/c)' : ''}</text>`);
+      }
+    }
+    const order = [...step.wires.filter(w => !step.fresh.includes(w)), ...step.fresh];
+    for (const id of order) {
+      const w = W[id], fresh = step.fresh.includes(id), col = COL[w.c];
+      const op = fresh ? 1 : 0.35, sw = fresh ? 3.5 : 2.5;
+      p.push(`<path d="${wirePath(w)}" fill="none" stroke="#ffffff" stroke-width="${sw + 3}" stroke-linecap="round" opacity="${op * 0.9}"/>`);
+      p.push(`<path d="${wirePath(w)}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" opacity="${op}"/>`);
+      for (const [x, y] of endpoints(w)) p.push(`<circle cx="${x}" cy="${y}" r="${fresh ? 4.5 : 3.5}" fill="${col}" stroke="#fff" stroke-width="1.3" opacity="${op}"/>`);
+    }
+    if (step.n === 0) p.push('<text x="145" y="450" font-size="14" fill="#8a8476" text-anchor="middle">Nothing wired · only the USB cable</text>');
+    if (step.skip) p.push('<text x="145" y="450" font-size="14" fill="#8a8476" text-anchor="middle">Skipped: MAX485 not needed</text>');
+    p.push('</svg>');
+    return p.join('');
+  }
+
+  /* ---------- page wiring ---------- */
+  let cur = 0;
+  try { cur = Math.min(6, Math.max(0, +localStorage.getItem('sensorLab.step') || 0)); } catch (e) {}
+  let last = null, lastAt = 0;
+  const esc = s => String(s).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+
+  function render() {
+    const s = STEPS[cur];
+    document.getElementById('stepNav').innerHTML = STEPS.map(x =>
+      `<button class="chip${x.n === cur ? ' primary' : ''}" data-step="${x.n}">${x.short}</button>`).join('');
+    document.getElementById('stepTitle').textContent = s.title;
+    document.getElementById('stepSketch').innerHTML = (s.test ? `Sketch: <code>hardware/tests/${s.test}</code> · ` : '') + esc(s.note);
+    document.getElementById('stepSvg').innerHTML = draw(s);
+    const used = [...new Set(s.wires.map(w => W[w].c))];
+    document.getElementById('stepLegend').innerHTML = used.map(c =>
+      `<span><span style="display:inline-block;width:18px;height:4px;border-radius:2px;background:${COL[c]};vertical-align:middle;margin-right:5px"></span>${COL_NAME[c]}</span>`).join('') +
+      (used.length ? '<span class="sub">Dot = plugged into that hole · White edge = wire crosses over, not joined · Each numbered row joins A–E and F–J across; each strip line joins down its length · Red dashes = strips may be split there, so only rows 32–60 are used</span>' : '');
+    document.getElementById('stepWires').innerHTML = s.fresh.length
+      ? '<tr><th>From</th><th>To</th><th>Colour</th></tr>' + s.fresh.map(id => {
+          const w = W[id];
+          return `<tr><td>${w.from}</td><td>${w.to}</td><td><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${COL[w.c]};vertical-align:middle"></span> ${COL_NAME[w.c].split(' ')[0]}</td></tr>`;
+        }).join('')
+      : `<tr><td class="sub">${s.n === 0 ? 'None. Just plug in the USB cable.' : s.skip ? 'None.' : 'None. Same wiring as the previous step.'}</td></tr>`;
+    document.getElementById('stepPass').innerHTML = s.pass.map(t => `<li>${esc(t)}</li>`).join('');
+    const b = document.getElementById('btnStepFlash');
+    b.hidden = !s.test || !bridge.on;
+    b.disabled = !bridge.on;
+    if (s.test && !bridge.on) document.getElementById('stepSketch').innerHTML += ' <br><span class="sub">Uploading needs the local bridge (<code>python hardware/sensor-lab/bridge.py</code>, then http://localhost:5500). Here you can still watch a board that already has the sketch: press <b>Connect Arduino</b> (Chrome/Edge).</span>';
+    b.title = bridge.on ? `Compile + upload ${s.test} (about 20 s)` : 'Start the bridge (python hardware/sensor-lab/bridge.py) and open http://localhost:5500';
+    renderLive();
+  }
+
+  function verdict(state, text) {
+    const v = document.getElementById('stepVerdict');
+    v.dataset.s = state; v.textContent = text;
+  }
+
+  function renderLive() {
+    const s = STEPS[cur], o = last, box = document.getElementById('stepLive');
+    if (!o || Date.now() - lastAt > 6000) {
+      box.innerHTML = bridge.on ? 'No data from the board yet. Plug in USB, then press <b>Upload this step</b>.' : 'Not connected. Run the bridge, or use Connect Arduino.';
+      return verdict('idle', 'no data');
+    }
+    if (Number.isFinite(o.step) && o.step !== s.n && s.test) {
+      box.innerHTML = `The board is running the <b>step ${o.step}</b> sketch. Press <b>Upload this step</b> to load step ${s.n}.`;
+      return verdict('warn', 'wrong sketch');
+    }
+    const parts = [];
+    let st = 'good', txt = 'PASS';
+    const vccOk = v => v >= 4.6 && v <= 5.3;
+    if (s.n === 0) {
+      parts.push(`Uptime <b>${o.uptime ?? '—'} s</b>`, `Vcc <b>${fmt(o.vcc, 3)} V</b>`);
+      if (!vccOk(o.vcc)) { st = 'bad'; txt = 'Vcc out of range'; }
+      else txt = 'PASS · check L LED blinks';
+    } else if (s.n === 1) {
+      parts.push(`Devices found <b>${o.i2c_count ?? '—'}</b>`, `Address <b>${o.i2c_count ? '0x' + o.i2c_addr.toString(16).toUpperCase().padStart(2, '0') : '—'}</b>`);
+      if (!o.i2c_count) { st = 'bad'; txt = 'no I2C device'; }
+    } else if (s.n === 2) {
+      parts.push(`Uptime <b>${o.uptime ?? '—'} s</b>`);
+      if (o.readback === 0) { parts.push('LCD memory read-back not supported by this backpack: confirm by eye'); st = 'warn'; txt = 'confirm by eye'; }
+      else if (o.lcd_ok === 1) { parts.push('Text read back from the LCD\'s memory: <b>"Smart Soil"</b> is stored. If you can\'t see it, only the contrast pot needs turning.'); txt = 'PASS · text in LCD'; }
+      else if (o.lcd_ok === 0) { parts.push('LCD memory does not hold "Smart Soil": see the serial monitor for what was read'); st = 'bad'; txt = 'text not stored'; }
+      else { parts.push('Look at the LCD: "Smart Soil" + the same seconds'); st = 'warn'; txt = 'confirm by eye'; }
+    } else if (s.n === 3) {
+      const r = o.raw_moisture;
+      parts.push(`Raw <b>${r ?? '—'}</b>`, `Board % <b>${o.moisture ?? '—'}</b>`, 'air ≈ 450–600 · water ≈ 200–350');
+      if (!(r > 50 && r < 1000)) { st = 'bad'; txt = 'suspicious raw'; }
+    } else if (s.n === 4) {
+      const d = o.po - 2.5;
+      parts.push(`Vcc <b>${fmt(o.vcc, 3)} V</b>`, `Po <b>${fmt(o.po, 3)} V</b>`, `vs 2.50 V: <b>${d >= 0 ? '+' : ''}${fmt(d * 1000, 0)} mV</b>`, `noise <b>${o.noise_mv ?? '—'} mV</b>`, `moisture raw <b>${o.raw_moisture ?? '—'}</b>`);
+      if (Number.isFinite(o.ph)) parts.push(`pH <b>${fmt(o.ph, 2)}</b>${o.ph_final === 0 ? ' <span class="sub">(estimate)</span>' : ''}`);
+      if (!vccOk(o.vcc)) { st = 'bad'; txt = 'supply out of range'; }
+      else if (!(o.po > 0.1 && o.po < o.vcc - 0.1)) { st = 'bad'; txt = 'Po stuck at a rail'; }
+      else if (o.noise_mv > 20) { st = 'warn'; txt = 'noisy'; }
+      else txt = Math.abs(d) <= 0.02 ? 'PASS · offset OK' : 'supply OK · adjust offset';
+      if (st === 'good' && Math.abs(d) > 0.02) st = 'warn';
+    } else if (s.n === 6) {
+      const cls = p => p < 5.5 ? 'Strong acid' : p < 6.5 ? 'Acidic' : p <= 7.5 ? 'Neutral' : p <= 8.5 ? 'Alkaline' : 'Strong alkaline';
+      if (Number.isFinite(o.ph)) parts.push(`pH <b>${fmt(o.ph, 2)}</b> (${cls(o.ph)})${o.ph_final === 0 ? ' <span class="sub">estimate</span>' : ''}`);
+      else parts.push('pH <b>—</b> probe out of liquid (dip it)');
+      parts.push(`Moisture <b>${o.moisture ?? '—'} %</b> (raw ${o.raw_moisture ?? '—'})`, `Po <b>${fmt(o.po, 3)} V</b>`, `Vcc <b>${fmt(o.vcc, 2)} V</b>`, `LCD repairs <b>${o.lcd_resets ?? 0}</b>`);
+      if (o.probe === 0) { st = 'warn'; txt = 'dip the probe'; }
+      else if (!vccOk(o.vcc)) { st = 'bad'; txt = 'supply out of range'; }
+      else txt = 'RUNNING · final firmware';
+    }
+    box.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+    verdict(st, txt);
+  }
+
+  window.onStepData = obj => { last = obj; lastAt = Date.now(); renderLive(); };
+  setInterval(renderLive, 2000);
+
+  document.getElementById('stepNav').addEventListener('click', e => {
+    const b = e.target.closest('[data-step]'); if (!b) return;
+    cur = +b.dataset.step; try { localStorage.setItem('sensorLab.step', cur); } catch (er) {}
+    render();
+  });
+  document.getElementById('btnStepFlash').addEventListener('click', async () => {
+    const s = STEPS[cur], b = document.getElementById('btnStepFlash');
+    b.disabled = true; toast(`Compiling and uploading ${s.test}… about 20 s`);
+    try {
+      const r = await fetch('/api/flash', { method: 'POST', headers: BRIDGE_HDR, body: JSON.stringify({ test: s.test }) });
+      const j = await r.json();
+      addLine(j.ok ? 'sys' : 'err', (j.ok ? `Upload OK (${s.test}).` : `Upload FAILED (${s.test}).`) + '\n' + (j.log || ''));
+      toast(j.ok ? 'Uploaded. The board restarts.' : 'Upload failed: see the serial monitor');
+    } catch (er) { addLine('err', 'Upload request failed: ' + er.message); }
+    b.disabled = !bridge.on;
+  });
+  setTimeout(render, 800);
+  render();
+})();
+
+</script>
+</body>
+</html>
