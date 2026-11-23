@@ -13,6 +13,7 @@ import { MockDataGenerator, DemoSampleId } from '../utils/mockData';
 import { RecommendationEngine } from '../utils/recommendationEngine';
 import { assessSensorQuality, classifyMoisture, classifyPh, CROP_PH_RANGE } from '../utils/soilAnalysis';
 import { exportRecommendationsCsv, exportSensorCsv } from '../utils/exportCsv';
+import { fetchWeather, WeatherNow } from '../utils/weather';
 import { SensorCard } from './components/SensorCard';
 import { ConnectionPanel } from './components/ConnectionPanel';
 import { DeviceStatus } from './components/DeviceStatus';
@@ -39,6 +40,31 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [currentManualInputs, setCurrentManualInputs] = useState<ManualInputs>({ cropType: 'rice', soilType: 'loamy' });
   const [recError, setRecError] = useState<string | null>(null);
+  const [weather, setWeather] = useState<WeatherNow | null>(null);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+  const weatherRef = useRef<WeatherNow | null>(null);
+
+  // air temperature + humidity from online weather (no such sensor on the analyzer)
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const w = await fetchWeather();
+        if (!alive) return;
+        weatherRef.current = w;
+        setWeather(w);
+        setWeatherError(null);
+      } catch (e: any) {
+        if (alive) setWeatherError(String(e?.message ?? e));
+      }
+    };
+    load();
+    const id = window.setInterval(load, 10 * 60 * 1000); // weather model updates every 15 min
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
 
   const serialConnection = useRef<ArduinoSerialConnection | null>(null);
   const mockDataGenerator = useRef<MockDataGenerator | null>(null);
@@ -64,6 +90,9 @@ export default function App() {
   const handleData = (data: ArduinoData, source: DataSource) => {
     const reading: SensorReading = {
       ...data,
+      // the firmware's 25 °C / 60 % are placeholders: use the current weather instead
+      temperature: weatherRef.current?.temperature,
+      humidity: weatherRef.current?.humidity,
       timestamp: new Date(),
       quality: assessSensorQuality(data, source),
       source
@@ -143,7 +172,11 @@ export default function App() {
   };
 
   const phBand = CROP_PH_RANGE[currentManualInputs.cropType] ?? [6.0, 7.5];
-  const assumedNote = sensorData ? 'Assumed value: no sensor in this build' : 'No sensor in this build';
+  const weatherNote = weather
+    ? `Online weather · ${weather.place} · ${weather.observedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    : weatherError
+    ? 'Weather unavailable (offline?)'
+    : 'Loading local weather…';
 
   const tabBtn = (id: TabType, label: string, Icon: typeof BarChart3) => (
     <button
@@ -203,8 +236,8 @@ export default function App() {
             icon="moisture"
             status={sensorData ? classifyMoisture(sensorData.moisture) : undefined}
           />
-          <SensorCard label="Temperature" value={sensorData?.temperature} unit="°C" icon="temperature" muted note={assumedNote} />
-          <SensorCard label="Humidity" value={sensorData?.humidity} unit="%" decimals={0} icon="humidity" muted note={assumedNote} />
+          <SensorCard label="Temperature" value={weather?.temperature} unit="°C" icon="temperature" note={weatherNote} emptyText="--" />
+          <SensorCard label="Humidity" value={weather?.humidity} unit="%" decimals={0} icon="humidity" note={weatherNote} emptyText="--" />
         </div>
 
         <div className="mb-8 print:hidden">

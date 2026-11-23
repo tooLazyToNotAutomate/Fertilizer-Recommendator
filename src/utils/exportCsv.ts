@@ -21,7 +21,7 @@ const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
 
 export function exportSensorCsv(history: SensorReading[]) {
   download(`soil-readings-${stamp()}.csv`, [
-    ['time', 'source', 'ph', 'moisture_pct', 'sensor_quality', 'probe_in_liquid', 'po_volts', 'vcc_volts', 'noise_mv', 'temperature_assumed_c', 'humidity_assumed_pct'],
+    ['time', 'source', 'ph', 'moisture_pct', 'sensor_quality', 'probe_in_liquid', 'po_volts', 'vcc_volts', 'noise_mv', 'air_temperature_c_weather', 'air_humidity_pct_weather'],
     ...history.map((r) => [
       r.timestamp.toISOString(),
       r.source,

@@ -4,7 +4,7 @@ import { PROTOTYPE } from './soilAnalysis';
 /**
  * Demo mode: simulates the real prototype with the three exhibition jars.
  * Values drift slowly around each sample like the real probe does, and the
- * line looks like the firmware's JSON (fixed assumed temperature/humidity).
+ * line looks like the firmware's JSON (temperature/humidity come from online weather).
  */
 export const DEMO_SAMPLES = {
   A: { name: 'Jar A · Red sandy soil', ph: 5.9, moisture: 38 },
@@ -47,8 +47,6 @@ export class MockDataGenerator {
     const data: ArduinoData = {
       ph,
       moisture: Math.round(Math.min(100, Math.max(0, this.moisture))),
-      temperature: PROTOTYPE.assumedTempC,
-      humidity: PROTOTYPE.assumedHumidity,
       fw: 10,
       probe: 1,
       ph_final: 1,

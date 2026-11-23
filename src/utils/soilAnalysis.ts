@@ -11,9 +11,7 @@ export const PROTOTYPE = {
   firmware: 'soil_analyzer v1.0',
   calibratedOn: '2026-11-21',
   ph: { v7: 2.5058, slopeVPerPh: 0.1828, buffers: '4.00 / 7.00 / 10.01', accuracy: '±0.05 pH' },
-  moisture: { airRaw: 592, waterRaw: 323 }, // air re-measured 2026-11-23
-  assumedTempC: 25,
-  assumedHumidity: 60
+  moisture: { airRaw: 592, waterRaw: 323 } // air re-measured 2026-11-23
 };
 
 export interface PhClass {
