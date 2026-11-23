@@ -1,62 +1,50 @@
-import { ArduinoData, FertilizerRecommendation, ManualInputs, SensorReading } from '../types';
+import { FertilizerRecommendation, ManualInputs, SensorReading } from '../types';
 import { MLModel } from './mlPrediction';
+import { classifyMoisture, nutrientAvailabilityNotes, phAmendment } from './soilAnalysis';
 
 export class RecommendationEngine {
   private mlModel = new MLModel();
-
-  assessSensorQuality(data: ArduinoData): 'good' | 'fair' | 'poor' {
-    if (data.ph < 4.0 || data.ph > 9.0 || data.moisture < 0 || data.moisture > 100) {
-      return 'poor';
-    }
-    if (data.ph < 5.0 || data.ph > 8.0) {
-      return 'fair';
-    }
-    return 'good';
-  }
 
   async generateRecommendation(
     sensorData: SensorReading,
     manualInputs: ManualInputs
   ): Promise<FertilizerRecommendation> {
+    if (sensorData.ph === undefined) {
+      throw new Error('No pH reading: dip the probe in the soil slurry first.');
+    }
     const { ph, moisture } = sensorData;
     const { cropType } = manualInputs;
 
-    // Use ML Model for prediction
     const prediction = await this.mlModel.predictFertilizer(sensorData, manualInputs);
+    const amendment = phAmendment(ph, cropType, manualInputs.soilType);
+
+    const warnings: string[] = [];
+    if (amendment.action === 'lime')
+      warnings.push(`Soil is too acidic for ${cropType}: apply about ${amendment.amountKgPerAcre} kg/acre of agricultural lime (see pH correction).`);
+    if (amendment.action === 'sulfur')
+      warnings.push(`Soil is too alkaline for ${cropType}: see the pH correction (elemental sulfur) below.`);
+    warnings.push(...nutrientAvailabilityNotes(ph));
+
+    const mc = classifyMoisture(moisture);
+    if (mc.label === 'Dry') warnings.push('Soil is dry. Irrigate before applying fertilizer so it can dissolve and reach the roots.');
+    if (mc.label === 'Saturated') warnings.push('Soil is saturated. Wait for it to drain; applying now risks nutrients washing away.');
+    if (manualInputs.rainfall && manualInputs.rainfall > 50)
+      warnings.push('Heavy recent rainfall. Delay application to avoid run-off.');
+    if (sensorData.quality === 'fair')
+      warnings.push('Sensor reading quality is only fair (see Device status). Re-check pH in buffer 7.00 if results look wrong.');
 
     let applicationTiming = 'Apply in two split doses: 50% at sowing, 50% after 30 days.';
-    let warnings: string[] = [];
-
-    // pH specific adjustments & warnings
-    if (ph < 6.0) {
-      warnings.push('Soil is acidic. Consider adding lime to neutralize pH.');
-    } else if (ph > 8.0) {
-      warnings.push('Soil is alkaline. Consider adding gypsum.');
-    }
-
-    // Moisture warnings
-    if (moisture < 20) {
-      warnings.push('Soil is too dry. Irrigate before applying fertilizers.');
-    } else if (moisture > 80) {
-      warnings.push('Soil is saturated. Avoid application to prevent leaching.');
-    }
-
-    // Rainfall warnings (if available)
-    if (manualInputs.rainfall && manualInputs.rainfall > 50) {
-      warnings.push('Heavy rainfall predicted. Delay application to avoid runoff.');
-    }
-
-    // Crop specific timing logic
-    if (cropType === 'rice') {
-      applicationTiming = 'Basal dose at puddling followed by top dressing at tillering and panicle initiation.';
-    } else if (cropType === 'wheat') {
-      applicationTiming = 'Apply 1/3 Nitrogen and full P & K at sowing, remaining Nitrogen after first irrigation.';
-    } else if (cropType === 'maize') {
-      applicationTiming = 'Apply 25% N at sowing, 50% at knee-high stage, and 25% at tasseling.';
-    }
+    if (cropType === 'rice')
+      applicationTiming = 'Basal dose at puddling, then top-dress at tillering and panicle initiation.';
+    else if (cropType === 'wheat')
+      applicationTiming = 'Apply 1/3 of the nitrogen and all P & K at sowing; the remaining nitrogen after the first irrigation.';
+    else if (cropType === 'maize')
+      applicationTiming = 'Apply 25% N at sowing, 50% at knee-high stage and 25% at tasselling.';
+    if (amendment.action === 'lime')
+      applicationTiming = 'Apply lime 2–3 weeks BEFORE fertilizer (never mix lime with urea/DAP). ' + applicationTiming;
 
     return {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).slice(2, 11),
       fertilizerType: prediction.fertilizerType,
       dosageBand: prediction.dosageBand,
       dosageAmount: prediction.dosageAmount,
@@ -64,6 +52,7 @@ export class RecommendationEngine {
       reason: prediction.reason,
       confidence: prediction.confidence,
       warnings: warnings.length > 0 ? warnings : undefined,
+      amendment,
       timestamp: new Date(),
       sensorData,
       manualInputs

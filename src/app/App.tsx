@@ -1,17 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
-import { Sprout, BarChart3, TrendingUp, FileText } from 'lucide-react';
+import { Sprout, BarChart3, TrendingUp, FileText, Download, Printer } from 'lucide-react';
 import {
   SensorReading,
   ManualInputs,
   FertilizerRecommendation,
   ConnectionStatus,
-  ArduinoData
+  ArduinoData,
+  DataSource
 } from '../types';
 import { ArduinoSerialConnection, isWebSerialSupported } from '../utils/serialCommunication';
-import { MockDataGenerator } from '../utils/mockData';
+import { MockDataGenerator, DemoSampleId } from '../utils/mockData';
 import { RecommendationEngine } from '../utils/recommendationEngine';
+import { assessSensorQuality, classifyMoisture, classifyPh, CROP_PH_RANGE } from '../utils/soilAnalysis';
+import { exportRecommendationsCsv, exportSensorCsv } from '../utils/exportCsv';
 import { SensorCard } from './components/SensorCard';
 import { ConnectionPanel } from './components/ConnectionPanel';
+import { DeviceStatus } from './components/DeviceStatus';
 import { ManualInputForm } from './components/ManualInputForm';
 import { RecommendationCard } from './components/RecommendationCard';
 import { HistoryTable } from './components/HistoryTable';
@@ -22,22 +26,19 @@ import { FertilizerDistributionChart } from './components/FertilizerDistribution
 
 type TabType = 'dashboard' | 'recommendation' | 'analytics';
 
+const HISTORY_LIMIT = 300; // 5 minutes at one reading per second
+
 export default function App() {
   const [sensorData, setSensorData] = useState<SensorReading | null>(null);
   const [sensorHistory, setSensorHistory] = useState<SensorReading[]>([]);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
-    connected: false
-  });
-  const [currentRecommendation, setCurrentRecommendation] = useState<
-    FertilizerRecommendation | undefined
-  >();
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({ connected: false });
+  const [currentRecommendation, setCurrentRecommendation] = useState<FertilizerRecommendation | undefined>();
   const [history, setHistory] = useState<FertilizerRecommendation[]>([]);
   const [isMockMode, setIsMockMode] = useState(false);
+  const [demoSample, setDemoSample] = useState<DemoSampleId>('C');
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-  const [currentManualInputs, setCurrentManualInputs] = useState<ManualInputs>({
-    cropType: 'rice',
-    soilType: 'loamy'
-  });
+  const [currentManualInputs, setCurrentManualInputs] = useState<ManualInputs>({ cropType: 'rice', soilType: 'loamy' });
+  const [recError, setRecError] = useState<string | null>(null);
 
   const serialConnection = useRef<ArduinoSerialConnection | null>(null);
   const mockDataGenerator = useRef<MockDataGenerator | null>(null);
@@ -47,9 +48,12 @@ export default function App() {
     serialConnection.current = new ArduinoSerialConnection();
     mockDataGenerator.current = new MockDataGenerator();
 
-    serialConnection.current.onData(handleArduinoData);
-    serialConnection.current.onStatus(setConnectionStatus);
-    mockDataGenerator.current.onData(handleArduinoData);
+    serialConnection.current.onData((d) => handleData(d, 'arduino'));
+    serialConnection.current.onStatus((st) =>
+      // keep lastUpdate across messages; a fresh 'connected' clears any old error
+      setConnectionStatus((prev) => (st.connected ? { ...prev, ...st, error: undefined } : st))
+    );
+    mockDataGenerator.current.onData((d) => handleData(d, 'demo'));
 
     return () => {
       serialConnection.current?.disconnect();
@@ -57,96 +61,117 @@ export default function App() {
     };
   }, []);
 
-  const handleArduinoData = (data: ArduinoData) => {
-    const quality = recommendationEngine.current.assessSensorQuality(data);
+  const handleData = (data: ArduinoData, source: DataSource) => {
     const reading: SensorReading = {
-      ph: data.ph,
-      moisture: data.moisture,
-      temperature: data.temperature,
-      humidity: data.humidity,
+      ...data,
       timestamp: new Date(),
-      quality
+      quality: assessSensorQuality(data, source),
+      source
     };
     setSensorData(reading);
+    setSensorHistory((prev) => [...prev, reading].slice(-HISTORY_LIMIT));
+  };
 
-    // Add to history (keep last 50 readings)
-    setSensorHistory((prev) => [...prev, reading].slice(-50));
+  const resetReadings = () => {
+    setSensorData(null);
+    setSensorHistory([]);
   };
 
   const handleConnect = async () => {
-    if (serialConnection.current) {
-      const success = await serialConnection.current.connect();
-      if (success && isMockMode) {
-        mockDataGenerator.current?.stop();
-        setIsMockMode(false);
-      }
+    if (!serialConnection.current) return;
+    if (isMockMode) {
+      mockDataGenerator.current?.stop();
+      setIsMockMode(false);
     }
+    resetReadings(); // don't mix demo values into real measurements
+    await serialConnection.current.connect();
   };
 
   const handleDisconnect = async () => {
-    if (serialConnection.current) {
-      await serialConnection.current.disconnect();
-    }
+    await serialConnection.current?.disconnect();
   };
 
   const handleMockData = () => {
     if (!isMockMode) {
-      mockDataGenerator.current?.start(2000);
+      resetReadings();
+      mockDataGenerator.current?.setSample(demoSample);
+      mockDataGenerator.current?.start(1000);
       setIsMockMode(true);
     } else {
       mockDataGenerator.current?.stop();
       setIsMockMode(false);
-      setSensorData(null);
+      resetReadings();
     }
   };
 
+  const handleDemoSample = (id: DemoSampleId) => {
+    setDemoSample(id);
+    mockDataGenerator.current?.setSample(id);
+  };
+
+  const noDataReason = !sensorData
+    ? 'No sensor data yet. Connect the analyzer (or start demo mode) first.'
+    : sensorData.ph === undefined
+    ? 'The pH probe is out of liquid. Dip it in the soil slurry and wait for a stable reading.'
+    : undefined;
+
   const handleGetRecommendation = async (manualInputs: ManualInputs) => {
-    if (!sensorData) {
-      alert('No sensor data available. Please connect Arduino or use mock data.');
-      return;
-    }
-
+    if (!sensorData || noDataReason) return;
     setCurrentManualInputs(manualInputs);
-
-    const recommendation = await recommendationEngine.current.generateRecommendation(
-      sensorData,
-      manualInputs
-    );
-
-    setCurrentRecommendation(recommendation);
-    setHistory((prev) => [recommendation, ...prev].slice(0, 20));
-
-    // Switch to recommendation tab to show results
-    setActiveTab('recommendation');
+    setRecError(null);
+    try {
+      const recommendation = await recommendationEngine.current.generateRecommendation(sensorData, manualInputs);
+      setCurrentRecommendation(recommendation);
+      setHistory((prev) => [recommendation, ...prev].slice(0, 20));
+      setActiveTab('recommendation');
+      setTimeout(() => document.getElementById('current-recommendation')?.scrollIntoView({ behavior: 'smooth' }), 50);
+    } catch (e: any) {
+      setRecError(String(e?.message ?? e));
+    }
   };
 
   const handleClearHistory = () => {
     if (confirm('Clear all recommendation history?')) {
       setHistory([]);
+      setCurrentRecommendation(undefined);
     }
   };
 
   const handleSelectHistory = (rec: FertilizerRecommendation) => {
     setCurrentRecommendation(rec);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('current-recommendation')?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  const phBand = CROP_PH_RANGE[currentManualInputs.cropType] ?? [6.0, 7.5];
+  const assumedNote = sensorData ? 'Assumed value: no sensor in this build' : 'No sensor in this build';
+
+  const tabBtn = (id: TabType, label: string, Icon: typeof BarChart3) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      aria-current={activeTab === id ? 'page' : undefined}
+      className={`flex-1 flex items-center justify-center gap-2 py-3 px-3 sm:px-6 rounded-lg text-base sm:text-lg font-semibold transition-all ${
+        activeTab === id ? 'bg-green-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+      }`}
+    >
+      <Icon className="w-5 h-5 shrink-0" />
+      <span className="truncate">{label}</span>
+    </button>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-100 via-blue-50 to-green-50">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Header */}
         <header className="mb-8 text-center">
           <div className="flex items-center justify-center gap-3 mb-3">
-            <Sprout className="w-12 h-12 text-green-600" />
-            <h1 className="text-5xl font-bold text-gray-900">Smart Fertilizer Advisor</h1>
+            <Sprout className="w-10 h-10 sm:w-12 sm:h-12 text-green-600" />
+            <h1 className="text-3xl sm:text-5xl font-bold text-gray-900">Smart Fertilizer Advisor</h1>
           </div>
-          <p className="text-xl text-gray-700">
-            AI-Powered Dashboard for Smart Farming Decisions
+          <p className="text-lg sm:text-xl text-gray-700">
+            Live soil pH &amp; moisture from the Smart Soil Analyzer, turned into fertilizer and pH-correction advice
           </p>
         </header>
 
-        {/* Connection Panel */}
-        <div className="mb-8">
+        <div className="mb-8 print:hidden">
           <ConnectionPanel
             status={connectionStatus}
             onConnect={handleConnect}
@@ -154,85 +179,50 @@ export default function App() {
             onMockData={handleMockData}
             isMockMode={isMockMode}
             isWebSerialSupported={isWebSerialSupported()}
+            demoSample={demoSample}
+            onDemoSample={handleDemoSample}
           />
         </div>
 
-        {/* Live Sensor Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <SensorCard
             label="Soil pH"
             value={sensorData?.ph}
             unit=""
+            decimals={2}
             icon="ph"
-            quality={sensorData?.quality}
+            status={sensorData?.ph !== undefined ? classifyPh(sensorData.ph) : undefined}
+            emptyText={sensorData ? 'Probe out of liquid' : '--'}
+            note={sensorData?.quality === 'fair' ? 'Check device status' : undefined}
           />
           <SensorCard
             label="Soil Moisture"
             value={sensorData?.moisture}
             unit="%"
+            decimals={0}
             icon="moisture"
-            quality={sensorData?.quality}
+            status={sensorData ? classifyMoisture(sensorData.moisture) : undefined}
           />
-          <SensorCard
-            label="Temperature"
-            value={sensorData?.temperature}
-            unit="°C"
-            icon="temperature"
-          />
-          <SensorCard label="Humidity" value={sensorData?.humidity} unit="%" icon="humidity" />
+          <SensorCard label="Temperature" value={sensorData?.temperature} unit="°C" icon="temperature" muted note={assumedNote} />
+          <SensorCard label="Humidity" value={sensorData?.humidity} unit="%" decimals={0} icon="humidity" muted note={assumedNote} />
         </div>
 
-        {/* Tab Navigation */}
-        <div className="mb-8">
+        <div className="mb-8 print:hidden">
           <div className="bg-white rounded-lg shadow-lg p-2 border-2 border-gray-200">
             <div className="flex gap-2">
-              <button
-                onClick={() => setActiveTab('dashboard')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 px-6 rounded-lg text-lg font-semibold transition-all ${
-                  activeTab === 'dashboard'
-                    ? 'bg-green-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <BarChart3 className="w-5 h-5" />
-                Dashboard
-              </button>
-              <button
-                onClick={() => setActiveTab('recommendation')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 px-6 rounded-lg text-lg font-semibold transition-all ${
-                  activeTab === 'recommendation'
-                    ? 'bg-green-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <FileText className="w-5 h-5" />
-                Get Recommendation
-              </button>
-              <button
-                onClick={() => setActiveTab('analytics')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 px-6 rounded-lg text-lg font-semibold transition-all ${
-                  activeTab === 'analytics'
-                    ? 'bg-green-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <TrendingUp className="w-5 h-5" />
-                Analytics
-              </button>
+              {tabBtn('dashboard', 'Dashboard', BarChart3)}
+              {tabBtn('recommendation', 'Get Recommendation', FileText)}
+              {tabBtn('analytics', 'Analytics', TrendingUp)}
             </div>
           </div>
         </div>
 
-        {/* Tab Content */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
-            {/* Analytics Dashboard */}
+            <DeviceStatus reading={sensorData} />
             <AnalyticsDashboard sensorHistory={sensorHistory} recommendations={history} />
+            <SensorTrendChart data={sensorHistory} maxPoints={60} phBand={phBand} />
 
-            {/* Sensor Trends */}
-            <SensorTrendChart data={sensorHistory} maxPoints={20} />
-
-            {/* Quick Actions */}
             <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg shadow-lg p-6 border-2 border-green-200">
               <h3 className="text-2xl font-bold text-gray-900 mb-4">Quick Actions</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -257,85 +247,77 @@ export default function App() {
 
         {activeTab === 'recommendation' && (
           <div className="space-y-8">
-            {/* Input Form */}
-            <ManualInputForm onSubmit={handleGetRecommendation} />
-
-            {/* Nutrient Gap Analysis */}
-            {currentManualInputs && (
-              <NutrientGapChart
-                manualInputs={currentManualInputs}
-                cropType={currentManualInputs.cropType}
-              />
+            <ManualInputForm
+              onSubmit={handleGetRecommendation}
+              onChange={setCurrentManualInputs}
+              initial={currentManualInputs}
+              disabledReason={noDataReason}
+            />
+            {recError && (
+              <p className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-800" role="alert">
+                {recError}
+              </p>
             )}
 
-            {/* Current Recommendation */}
+            <NutrientGapChart manualInputs={currentManualInputs} cropType={currentManualInputs.cropType} />
+
             {currentRecommendation && (
-              <div>
-                <h2 className="text-3xl font-bold text-gray-900 mb-4">Current Recommendation</h2>
+              <div id="current-recommendation" className="scroll-mt-4">
                 <RecommendationCard recommendation={currentRecommendation} />
               </div>
             )}
 
-            {/* Recommendation History */}
             {history.length > 0 && (
-              <div>
-                <h2 className="text-3xl font-bold text-gray-900 mb-4">Recommendation History</h2>
-                <HistoryTable
-                  history={history}
-                  onClear={handleClearHistory}
-                  onSelect={handleSelectHistory}
-                />
-              </div>
+              <HistoryTable history={history} onClear={handleClearHistory} onSelect={handleSelectHistory} />
             )}
           </div>
         )}
 
         {activeTab === 'analytics' && (
           <div className="space-y-8">
-            {/* Fertilizer Distribution */}
             <FertilizerDistributionChart recommendations={history} />
-
-            {/* Sensor Trends (Detailed) */}
-            <SensorTrendChart data={sensorHistory} maxPoints={50} />
-
-            {/* Statistics Dashboard */}
+            <SensorTrendChart data={sensorHistory} maxPoints={HISTORY_LIMIT} phBand={phBand} />
             <AnalyticsDashboard sensorHistory={sensorHistory} recommendations={history} />
 
-            {/* Export Options */}
-            <div className="bg-white rounded-lg shadow-lg p-6 border-2 border-gray-200">
+            <div className="bg-white rounded-lg shadow-lg p-6 border-2 border-gray-200 print:hidden">
               <h3 className="text-2xl font-bold text-gray-900 mb-4">Data Export</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <button
-                  onClick={() => alert('CSV export feature coming soon!')}
-                  className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg font-semibold transition-colors"
+                  onClick={() => exportSensorCsv(sensorHistory)}
+                  disabled={sensorHistory.length === 0}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 px-6 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
                 >
-                  Export Sensor Data (CSV)
+                  <Download className="w-5 h-5" />
+                  Sensor readings (CSV)
                 </button>
                 <button
-                  onClick={() => alert('CSV export feature coming soon!')}
-                  className="bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-lg font-semibold transition-colors"
+                  onClick={() => exportRecommendationsCsv(history)}
+                  disabled={history.length === 0}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 px-6 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
                 >
-                  Export Recommendations (CSV)
+                  <Download className="w-5 h-5" />
+                  Recommendations (CSV)
                 </button>
                 <button
-                  onClick={() => alert('PDF report feature coming soon!')}
-                  className="bg-purple-600 hover:bg-purple-700 text-white py-3 px-6 rounded-lg font-semibold transition-colors"
+                  onClick={() => window.print()}
+                  className="bg-purple-600 hover:bg-purple-700 text-white py-3 px-6 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
                 >
-                  Generate PDF Report
+                  <Printer className="w-5 h-5" />
+                  Print / save as PDF
                 </button>
               </div>
+              <p className="mt-3 text-sm text-gray-500">
+                Readings are kept for the last {HISTORY_LIMIT / 60} minutes in this browser tab only; export them before closing.
+              </p>
             </div>
           </div>
         )}
 
-        {/* Footer */}
         <footer className="mt-12 text-center text-gray-600 text-sm">
-          <p>
-            Smart Fertilizer Advisor Dashboard - Powered by Arduino Sensors & AI Analytics
-          </p>
+          <p>Smart Fertilizer Advisor · Smart Soil Analyzer prototype (Arduino Uno, glass pH electrode, capacitive moisture sensor)</p>
           <p className="mt-2">
-            For best results, calibrate sensors regularly and consult with local agricultural
-            experts
+            pH calibrated with buffers 4.00 / 7.00 / 10.01. Advice is a guide: confirm large lime/sulfur doses with a soil lab and local
+            agricultural experts.
           </p>
         </footer>
       </div>

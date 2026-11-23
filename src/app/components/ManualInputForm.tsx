@@ -3,6 +3,11 @@ import { ManualInputs, CropType, SoilType } from '../../types';
 
 interface ManualInputFormProps {
   onSubmit: (inputs: ManualInputs) => void;
+  /** called on every change, so charts can follow the selected crop */
+  onChange?: (inputs: ManualInputs) => void;
+  initial?: ManualInputs;
+  /** when set, the submit button is disabled and this text explains why */
+  disabledReason?: string;
 }
 
 const CROP_OPTIONS = [
@@ -29,11 +34,12 @@ const SOIL_OPTIONS = [
   { id: 'alluvial', en: 'Alluvial', te: 'ఒండ్రు' }
 ];
 
-export function ManualInputForm({ onSubmit }: ManualInputFormProps) {
-  const [inputs, setInputs] = useState<ManualInputs>({
-    cropType: 'rice',
-    soilType: 'loamy'
-  });
+export function ManualInputForm({ onSubmit, onChange, initial, disabledReason }: ManualInputFormProps) {
+  const [inputs, setInputsState] = useState<ManualInputs>(initial ?? { cropType: 'rice', soilType: 'loamy' });
+  const setInputs = (next: ManualInputs) => {
+    setInputsState(next);
+    onChange?.(next);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,7 +96,7 @@ export function ManualInputForm({ onSubmit }: ManualInputFormProps) {
             min="0"
             max="500"
             step="0.1"
-            value={inputs.nitrogen || ''}
+            value={inputs.nitrogen ?? ''}
             onChange={(e) =>
               setInputs({ ...inputs, nitrogen: e.target.value ? parseFloat(e.target.value) : undefined })
             }
@@ -108,7 +114,7 @@ export function ManualInputForm({ onSubmit }: ManualInputFormProps) {
             min="0"
             max="500"
             step="0.1"
-            value={inputs.phosphorus || ''}
+            value={inputs.phosphorus ?? ''}
             onChange={(e) =>
               setInputs({ ...inputs, phosphorus: e.target.value ? parseFloat(e.target.value) : undefined })
             }
@@ -126,7 +132,7 @@ export function ManualInputForm({ onSubmit }: ManualInputFormProps) {
             min="0"
             max="500"
             step="0.1"
-            value={inputs.potassium || ''}
+            value={inputs.potassium ?? ''}
             onChange={(e) =>
               setInputs({ ...inputs, potassium: e.target.value ? parseFloat(e.target.value) : undefined })
             }
@@ -144,7 +150,7 @@ export function ManualInputForm({ onSubmit }: ManualInputFormProps) {
             min="0"
             max="1000"
             step="0.1"
-            value={inputs.rainfall || ''}
+            value={inputs.rainfall ?? ''}
             onChange={(e) =>
               setInputs({ ...inputs, rainfall: e.target.value ? parseFloat(e.target.value) : undefined })
             }
@@ -154,9 +160,21 @@ export function ManualInputForm({ onSubmit }: ManualInputFormProps) {
         </div>
       </div>
 
+      <p className="mt-4 text-sm text-gray-500">
+        pH and moisture come from the analyzer. N, P and K are optional soil-test values; without them the advice follows the
+        crop's standard requirement.
+      </p>
+
+      {disabledReason && (
+        <p className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded-lg text-yellow-900" role="status">
+          {disabledReason}
+        </p>
+      )}
+
       <button
         type="submit"
-        className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white py-4 px-6 rounded-lg text-xl font-bold transition-colors"
+        disabled={!!disabledReason}
+        className="w-full mt-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-4 px-6 rounded-lg text-xl font-bold transition-colors"
       >
         Get Fertilizer Recommendation
       </button>

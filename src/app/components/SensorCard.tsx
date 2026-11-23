@@ -1,70 +1,53 @@
 import { Activity, Droplet, Thermometer, Wind } from 'lucide-react';
+import { PhClass, toneClasses } from '../../utils/soilAnalysis';
 
 interface SensorCardProps {
   label: string;
   value: number | undefined;
   unit: string;
   icon: 'ph' | 'moisture' | 'temperature' | 'humidity';
-  quality?: 'good' | 'fair' | 'poor';
+  decimals?: number;
+  /** soil interpretation, e.g. "Acidic" */
+  status?: PhClass;
+  /** small grey line under the value, e.g. "Assumed – no sensor" */
+  note?: string;
+  /** grey the card out (value is not measured) */
+  muted?: boolean;
+  /** shown instead of "--" when there is no value */
+  emptyText?: string;
 }
 
-export function SensorCard({ label, value, unit, icon, quality }: SensorCardProps) {
-  const getIcon = () => {
-    switch (icon) {
-      case 'ph':
-        return <Activity className="w-8 h-8" />;
-      case 'moisture':
-        return <Droplet className="w-8 h-8" />;
-      case 'temperature':
-        return <Thermometer className="w-8 h-8" />;
-      case 'humidity':
-        return <Wind className="w-8 h-8" />;
-    }
-  };
-
-  const getQualityColor = () => {
-    if (!quality) return 'text-gray-400';
-    switch (quality) {
-      case 'good':
-        return 'text-green-600';
-      case 'fair':
-        return 'text-yellow-600';
-      case 'poor':
-        return 'text-red-600';
-    }
-  };
+export function SensorCard({ label, value, unit, icon, decimals = 1, status, note, muted, emptyText }: SensorCardProps) {
+  const Icon = { ph: Activity, moisture: Droplet, temperature: Thermometer, humidity: Wind }[icon];
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 border-2 border-gray-200">
+    <div
+      className={`rounded-lg shadow-md p-6 border-2 ${
+        muted ? 'bg-gray-50 border-dashed border-gray-300' : 'bg-white border-gray-200'
+      }`}
+    >
       <div className="flex items-center justify-between mb-3">
         <span className="text-gray-600 text-lg">{label}</span>
-        <div className={getQualityColor()}>{getIcon()}</div>
+        <Icon className={`w-8 h-8 ${muted ? 'text-gray-300' : 'text-green-600'}`} />
       </div>
-      <div className="flex items-baseline">
+      <div className="flex items-baseline min-h-[2.5rem]">
         {value !== undefined ? (
           <>
-            <span className="text-4xl font-bold text-gray-900">{value.toFixed(1)}</span>
-            <span className="ml-2 text-xl text-gray-600">{unit}</span>
+            <span className={`text-4xl font-bold ${muted ? 'text-gray-400' : 'text-gray-900'}`}>
+              {value.toFixed(decimals)}
+            </span>
+            {unit && <span className="ml-2 text-xl text-gray-500">{unit}</span>}
           </>
         ) : (
-          <span className="text-2xl text-gray-400">--</span>
+          <span className="text-lg text-gray-400">{emptyText ?? '--'}</span>
         )}
       </div>
-      {quality && (
-        <div className="mt-2">
-          <span
-            className={`text-sm px-2 py-1 rounded ${
-              quality === 'good'
-                ? 'bg-green-100 text-green-800'
-                : quality === 'fair'
-                ? 'bg-yellow-100 text-yellow-800'
-                : 'bg-red-100 text-red-800'
-            }`}
-          >
-            {quality.toUpperCase()}
-          </span>
-        </div>
-      )}
+      <div className="mt-2 flex flex-wrap items-center gap-2 min-h-[1.75rem]">
+        {status && value !== undefined && (
+          <span className={`text-sm px-2 py-1 rounded font-semibold ${toneClasses[status.tone]}`}>{status.label}</span>
+        )}
+        {note && <span className="text-xs text-gray-500">{note}</span>}
+      </div>
     </div>
   );
 }

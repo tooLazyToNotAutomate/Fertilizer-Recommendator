@@ -20,7 +20,9 @@ export function HistoryTable({ history, onClear, onSelect }: HistoryTableProps) 
   return (
     <div className="bg-white rounded-lg shadow-lg border-2 border-gray-200 overflow-hidden">
       <div className="flex items-center justify-between p-4 bg-gray-50 border-b-2 border-gray-200">
-        <h3 className="text-xl font-bold text-gray-900">Recommendation History</h3>
+        <h3 className="text-xl font-bold text-gray-900">
+          Recommendation History <span className="text-sm font-normal text-gray-500">(click a row to view it)</span>
+        </h3>
         <button
           onClick={onClear}
           className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
@@ -72,7 +74,7 @@ export function HistoryTable({ history, onClear, onSelect }: HistoryTableProps) 
                 <td className="px-4 py-3 text-sm text-gray-700 capitalize">
                   {rec.manualInputs.cropType}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-700">{rec.sensorData.ph.toFixed(1)}</td>
+                <td className="px-4 py-3 text-sm text-gray-700">{rec.sensorData.ph !== undefined ? rec.sensorData.ph.toFixed(2) : '—'}</td>
                 <td className="px-4 py-3 text-sm text-gray-700">
                   {rec.sensorData.moisture.toFixed(0)}%
                 </td>
