@@ -22,16 +22,39 @@ export type SoilType =
   | 'black'
   | 'alluvial';
 
+/**
+ * One line from the Smart Soil Analyzer firmware (hardware/firmware/soil_analyzer, v1.0).
+ * pH and moisture are real, calibrated measurements. The build has NO temperature or
+ * humidity sensor: the firmware sends fixed assumed values (25 °C / 60 %).
+ * `ph` is missing while the probe is out of liquid (the reading would be noise).
+ */
 export interface ArduinoData {
-  ph: number;
+  ph?: number;
   moisture: number;
   temperature: number;
   humidity: number;
+  // diagnostics sent by the firmware (absent in demo data from older sketches)
+  fw?: number;            // firmware version x10 (10 = v1.0)
+  probe?: 0 | 1;          // 1 = pH probe in liquid, reading valid
+  ph_final?: 0 | 1;       // 1 = calibration from buffers, 0 = estimate
+  po?: number;            // pH board output voltage
+  vcc?: number;           // measured 5 V supply
+  noise_mv?: number;      // spread within one pH reading
+  raw_ph?: number;
+  raw_moisture?: number;
+  lcd_resets?: number;
+  i2c_timeouts?: number;
 }
+
+export type DataSource = 'arduino' | 'demo';
+
+/** How trustworthy one reading is (about the SENSOR, not the soil). */
+export type SensorQuality = 'good' | 'fair' | 'poor';
 
 export interface SensorReading extends ArduinoData {
   timestamp: Date;
-  quality: 'good' | 'fair' | 'poor';
+  quality: SensorQuality;
+  source: DataSource;
 }
 
 export interface ManualInputs {
@@ -52,13 +75,24 @@ export interface FertilizerRecommendation {
   reason: string;
   confidence: number;
   warnings?: string[];
+  amendment?: PhAmendment;
   timestamp: Date;
   sensorData: SensorReading;
   manualInputs: ManualInputs;
+}
+
+/** Lime / sulfur estimate to move soil pH into the crop's preferred range. */
+export interface PhAmendment {
+  action: 'lime' | 'sulfur' | 'none';
+  product: string;
+  targetPh: number;
+  amountKgPerAcre: number;
+  note: string;
 }
 
 export interface ConnectionStatus {
   connected: boolean;
   portName?: string;
   error?: string;
+  lastUpdate?: Date;
 }

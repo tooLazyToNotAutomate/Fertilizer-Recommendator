@@ -1,25 +1,11 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ManualInputs } from '../../types';
+import { CROP_NPK as CROP_REQUIREMENTS } from '../../utils/mlPrediction';
 
 interface NutrientGapChartProps {
   manualInputs: ManualInputs;
   cropType: string;
 }
-
-// Crop nutrient requirements (same as recommendation engine)
-const CROP_REQUIREMENTS: Record<string, { n: number; p: number; k: number }> = {
-  rice: { n: 80, p: 40, k: 40 },
-  wheat: { n: 120, p: 60, k: 40 },
-  maize: { n: 150, p: 75, k: 75 },
-  cotton: { n: 100, p: 50, k: 50 },
-  sugarcane: { n: 200, p: 80, k: 100 },
-  soybean: { n: 40, p: 60, k: 40 },
-  groundnut: { n: 25, p: 50, k: 75 },
-  tomato: { n: 100, p: 80, k: 100 },
-  potato: { n: 120, p: 60, k: 120 },
-  onion: { n: 100, p: 50, k: 100 },
-  chili: { n: 100, p: 50, k: 50 }
-};
 
 const COLORS = {
   nitrogen: '#3b82f6',
@@ -69,7 +55,8 @@ export function NutrientGapChart({ manualInputs, cropType }: NutrientGapChartPro
       {!hasNPKValues && (
         <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-blue-800 text-sm">
-            💡 Tip: Enter N, P, K values in the form below to see your nutrient gaps and get more accurate recommendations.
+            Tip: enter soil-test N, P and K values in the form above to see your nutrient gaps and get a precise dose.
+            The analyzer measures pH and moisture only; N-P-K needs a soil test kit or lab report.
           </p>
         </div>
       )}
