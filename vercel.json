@@ -20,6 +20,10 @@
       "handle": "filesystem"
     },
     {
+      "src": "/sensor-lab/?",
+      "dest": "/sensor-lab/index.html"
+    },
+    {
       "src": "/(.*)",
       "dest": "/index.html"
     }

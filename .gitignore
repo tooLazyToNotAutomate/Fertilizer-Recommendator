@@ -28,3 +28,6 @@ __pycache__/
 venv/
 .venv/
 backend/__pycache__/
+
+hardware/sensor-lab/bridge.log
+hardware/sensor-lab/lab_state.json
