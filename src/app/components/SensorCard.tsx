@@ -9,7 +9,7 @@ interface SensorCardProps {
   decimals?: number;
   /** soil interpretation, e.g. "Acidic" */
   status?: PhClass;
-  /** small grey line under the value, e.g. "Assumed – no sensor" */
+  /** small grey line under the value, e.g. "Online weather · Hyderabad · 11:15" */
   note?: string;
   /** grey the card out (value is not measured) */
   muted?: boolean;

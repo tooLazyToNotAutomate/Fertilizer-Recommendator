@@ -82,7 +82,12 @@ export function DeviceStatus({ reading }: DeviceStatusProps) {
             level={(r.i2c_timeouts ?? 0) > 0 ? 'warn' : 'ok'}
             hint={(r.i2c_timeouts ?? 0) > 0 ? 'A wire to the LCD is loose: push the jumpers in.' : undefined}
           />
-          <Item label="Temperature / humidity" value="Assumed 25 °C / 60 %" level="na" hint="No such sensor in this build" />
+          <Item
+            label="Temperature / humidity"
+            value={r.temperature !== undefined && r.humidity !== undefined ? `${r.temperature.toFixed(1)} °C / ${Math.round(r.humidity)} %` : 'Waiting for weather'}
+            level={r.temperature !== undefined ? 'ok' : 'na'}
+            hint="From online weather (Open-Meteo), not the analyzer"
+          />
         </div>
       )}
 
@@ -97,6 +102,7 @@ export function DeviceStatus({ reading }: DeviceStatusProps) {
           <li>Moisture: 0 % = sensor in air (raw {PROTOTYPE.moisture.airRaw}), 100 % = sensor in water (raw {PROTOTYPE.moisture.waterRaw}).</li>
           <li>How to sample: mix 1 part soil with 2.5 parts distilled water, stir, let settle, dip the probe; rinse it with distilled water between samples.</li>
           <li>One reading per second. Calibration is stored inside the Arduino.</li>
+          <li>Air temperature and humidity come from online weather for your location (Open-Meteo, refreshed every 10 minutes); the analyzer itself has no such sensor.</li>
         </ul>
       </details>
     </div>

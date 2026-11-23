@@ -25,14 +25,15 @@ export type SoilType =
 /**
  * One line from the Smart Soil Analyzer firmware (hardware/firmware/soil_analyzer, v1.0).
  * pH and moisture are real, calibrated measurements. The build has NO temperature or
- * humidity sensor: the firmware sends fixed assumed values (25 °C / 60 %).
+ * humidity sensor: the firmware sends fixed placeholders (25 °C / 60 %), which the app
+ * ignores. It fills temperature/humidity from online weather instead (utils/weather.ts).
  * `ph` is missing while the probe is out of liquid (the reading would be noise).
  */
 export interface ArduinoData {
   ph?: number;
   moisture: number;
-  temperature: number;
-  humidity: number;
+  temperature?: number; // °C, from online weather
+  humidity?: number; // %, from online weather
   // diagnostics sent by the firmware (absent in demo data from older sketches)
   fw?: number;            // firmware version x10 (10 = v1.0)
   probe?: 0 | 1;          // 1 = pH probe in liquid, reading valid
